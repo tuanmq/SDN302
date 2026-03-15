@@ -1,120 +1,85 @@
-import pool from '../config/database';
-import { Product, ProductCreateDto, ProductUpdateDto } from '../models/Product';
+import { ProductModel, IProduct } from '../models/Product';
 
 export class ProductRepository {
   private normalizeText(text: string): string {
     return text.trim().toUpperCase();
   }
 
-  async findAll(): Promise<Product[]> {
-    const query = 'SELECT * FROM product ORDER BY created_at DESC';
-    const result = await pool.query(query);
-    return result.rows;
+  async findAll(): Promise<IProduct[]> {
+    return ProductModel.find().sort({ created_at: -1 }).lean();
   }
 
-  async findAllActive(): Promise<Product[]> {
-    const query = 'SELECT * FROM product WHERE is_active = true ORDER BY created_at DESC';
-    const result = await pool.query(query);
-    return result.rows;
+  async findAllActive(): Promise<IProduct[]> {
+    return ProductModel.find({ is_active: true }).sort({ created_at: -1 }).lean();
   }
 
-  async findById(productId: number): Promise<Product | null> {
-    const query = 'SELECT * FROM product WHERE product_id = $1';
-    const result = await pool.query(query, [productId]);
-    return result.rows[0] || null;
+  async findById(productId: string): Promise<IProduct | null> {
+    return ProductModel.findById(productId).lean();
   }
 
-  async findByProductCode(productCode: string): Promise<Product | null> {
-    const query = 'SELECT * FROM product WHERE product_code = $1';
-    const result = await pool.query(query, [productCode]);
-    return result.rows[0] || null;
+  async findByProductCode(productCode: string): Promise<IProduct | null> {
+    return ProductModel.findOne({ product_code: productCode }).lean();
   }
 
-  async existsByNameAndUnit(productName: string, unit: string, excludeId?: number): Promise<boolean> {
+  async existsByNameAndUnit(productName: string, unit: string, excludeId?: string): Promise<boolean> {
     const normalizedName = this.normalizeText(productName);
     const normalizedUnit = this.normalizeText(unit);
-    
-    let query = 'SELECT COUNT(*) FROM product WHERE UPPER(TRIM(product_name)) = $1 AND UPPER(TRIM(unit)) = $2';
-    const params: any[] = [normalizedName, normalizedUnit];
-    
+    const filter: any = {
+      product_name: normalizedName,
+      unit: normalizedUnit
+    };
     if (excludeId) {
-      query += ' AND product_id != $3';
-      params.push(excludeId);
+      filter._id = { $ne: excludeId };
     }
-    
-    const result = await pool.query(query, params);
-    return parseInt(result.rows[0].count) > 0;
+    const count = await ProductModel.countDocuments(filter);
+    return count > 0;
   }
 
-  async create(productData: ProductCreateDto): Promise<Product> {
-    const normalizedName = this.normalizeText(productData.product_name);
-    const normalizedUnit = this.normalizeText(productData.unit);
-
-    const query = `
-      INSERT INTO product (product_code, product_name, unit)
-      VALUES ($1, $2, $3)
-      RETURNING *
-    `;
-    
-    const result = await pool.query(query, [productData.product_code, normalizedName, normalizedUnit]);
-    return result.rows[0];
+  async create(productData: Partial<IProduct>): Promise<IProduct> {
+    const normalizedName = this.normalizeText(productData.product_name as string);
+    const normalizedUnit = this.normalizeText(productData.unit as string);
+    const product = new ProductModel({
+      ...productData,
+      product_name: normalizedName,
+      unit: normalizedUnit
+    });
+    await product.save();
+    return product.toObject();
   }
 
-  async update(productId: number, productData: ProductUpdateDto): Promise<Product | null> {
-    const updates: string[] = [];
-    const values: any[] = [];
-    let paramCount = 1;
-
+  async update(productId: string, productData: Partial<IProduct>): Promise<IProduct | null> {
+    const updates: any = {};
     if (productData.product_name !== undefined) {
-      updates.push(`product_name = $${paramCount}`);
-      values.push(this.normalizeText(productData.product_name));
-      paramCount++;
+      updates.product_name = this.normalizeText(productData.product_name as string);
     }
-
     if (productData.unit !== undefined) {
-      updates.push(`unit = $${paramCount}`);
-      values.push(this.normalizeText(productData.unit));
-      paramCount++;
+      updates.unit = this.normalizeText(productData.unit as string);
     }
-
-    if (updates.length === 0) {
+    if (Object.keys(updates).length === 0) {
       return this.findById(productId);
     }
-
-    updates.push(`updated_at = CURRENT_TIMESTAMP`);
-    values.push(productId);
-
-    const query = `
-      UPDATE product 
-      SET ${updates.join(', ')}
-      WHERE product_id = $${paramCount}
-      RETURNING *
-    `;
-
-    const result = await pool.query(query, values);
-    return result.rows[0] || null;
+    updates.updated_at = new Date();
+    return ProductModel.findByIdAndUpdate(productId, updates, { new: true }).lean();
   }
 
-  async toggleActive(productId: number): Promise<Product | null> {
-    const query = `
-      UPDATE product 
-      SET is_active = NOT is_active
-      WHERE product_id = $1
-      RETURNING *
-    `;
-    const result = await pool.query(query, [productId]);
-    return result.rows[0] || null;
+  async toggleActive(productId: string): Promise<IProduct | null> {
+    const product = await ProductModel.findById(productId);
+    if (!product) return null;
+    product.is_active = !product.is_active;
+    await product.save();
+    return product.toObject();
   }
 
-  async search(searchTerm: string): Promise<Product[]> {
-    const normalizedSearch = `%${this.normalizeText(searchTerm)}%`;
-    const query = `
-      SELECT * FROM product 
-      WHERE UPPER(product_name) LIKE $1 OR UPPER(unit) LIKE $1
-      ORDER BY created_at DESC
-    `;
-    const result = await pool.query(query, [normalizedSearch]);
-    return result.rows;
+  async search(searchTerm: string): Promise<IProduct[]> {
+    const regex = new RegExp(this.normalizeText(searchTerm), 'i');
+    return ProductModel.find({
+      $or: [
+        { product_name: regex },
+        { unit: regex }
+      ]
+    })
+      .sort({ created_at: -1 })
+      .lean();
   }
 }
 

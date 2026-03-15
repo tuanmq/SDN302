@@ -27,9 +27,8 @@ export class UserController {
 
   getUserById = async (req: Request, res: Response): Promise<void> => {
     try {
-      const userId = parseInt(req.params.id as string);
-      
-      if (isNaN(userId)) {
+      const userId = req.params.id as string;
+      if (!userId) {
         res.status(400).json({
           success: false,
           message: 'Invalid user ID',
@@ -114,10 +113,10 @@ export class UserController {
 
   updateUser = async (req: Request, res: Response): Promise<void> => {
     try {
-      const userId = parseInt(req.params.id as string);
+      const userId = req.params.id as string;
       const userData: UserUpdateDto = req.body;
 
-      if (isNaN(userId)) {
+      if (!userId) {
         res.status(400).json({
           success: false,
           message: 'Invalid user ID',
@@ -170,9 +169,9 @@ export class UserController {
 
   deleteUser = async (req: Request, res: Response): Promise<void> => {
     try {
-      const userId = parseInt(req.params.id as string);
+      const userId = req.params.id as string;
 
-      if (isNaN(userId)) {
+      if (!userId) {
         res.status(400).json({
           success: false,
           message: 'Invalid user ID',

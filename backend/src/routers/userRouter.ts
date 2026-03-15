@@ -7,7 +7,7 @@ const router = Router();
 const userController = new UserController();
 
 router.use(jwtMiddleware);
-router.use(requireRole(1)); 
+router.use(requireRole('1')); 
 
 router.get('/', userController.getAllUsers);
 router.get('/:id', userController.getUserById);

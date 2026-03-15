@@ -6,7 +6,7 @@ import { requireRole } from '../middlewares/authMiddleware';
 const router = Router();
 
 router.use(jwtMiddleware);
-router.use(requireRole(1, 2)); 
+router.use(requireRole('1', '2')); 
 
 router.get('/', kitchenProductionController.getAllBatchPlans);
 router.post('/', kitchenProductionController.createBatchPlans);

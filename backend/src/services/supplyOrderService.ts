@@ -1,5 +1,5 @@
 import { SupplyOrderRepository } from '../repositories/supplyOrderRepository';
-import { SupplyOrder, SupplyOrderCreateDto } from '../models/SupplyOrder';
+import { ISupplyOrder, SupplyOrderCreateDto } from '../models/SupplyOrder';
 import { ProductRepository } from '../repositories/productRepository';
 import { InventoryRepository } from '../repositories/inventoryRepository';
 import * as supplyOrderItemBatchRepository from '../repositories/supplyOrderItemBatchRepository';
@@ -10,8 +10,8 @@ const inventoryRepository = new InventoryRepository();
 
 export class SupplyOrderService {
   async createSupplyOrder(
-    storeId: number,
-    createdBy: number,
+    storeId: string,
+    createdBy: string,
     orderData: SupplyOrderCreateDto
   ): Promise<any> {
     if (!orderData.supply_order_code || !orderData.supply_order_code.trim()) {
@@ -56,17 +56,13 @@ export class SupplyOrderService {
     const supplyOrder = await supplyOrderRepository.create(upperSupplyOrderCode, storeId, createdBy);
 
     for (const item of orderData.items) {
-      await supplyOrderRepository.createItem({
-        supply_order_id: supplyOrder.supply_order_id,
-        product_id: item.product_id,
-        requested_quantity: item.requested_quantity
-      });
+      await supplyOrderRepository.createItem(supplyOrder._id.toString(), item.product_id, item.requested_quantity);
     }
 
-    return await supplyOrderRepository.findByIdWithItems(supplyOrder.supply_order_id);
+    return await supplyOrderRepository.findByIdWithItems(supplyOrder._id.toString());
   }
 
-  async getSupplyOrderById(orderId: number): Promise<any> {
+  async getSupplyOrderById(orderId: string): Promise<any> {
     const order = await supplyOrderRepository.findByIdWithItems(orderId);
     if (!order) {
       throw new Error('Supply order not found');
@@ -74,17 +70,17 @@ export class SupplyOrderService {
     return order;
   }
 
-  async getSupplyOrdersByStore(storeId: number): Promise<SupplyOrder[]> {
-    return await supplyOrderRepository.findByStoreId(storeId);
+  async getSupplyOrdersByStore(storeId: string, from?: Date, to?: Date): Promise<ISupplyOrder[]> {
+    return await supplyOrderRepository.findByStoreId(storeId, from, to);
   }
 
-  async getAllSupplyOrders(): Promise<SupplyOrder[]> {
-    return await supplyOrderRepository.findAll();
+  async getAllSupplyOrders(from?: Date, to?: Date): Promise<ISupplyOrder[]> {
+    return await supplyOrderRepository.findAll(from, to);
   }
 
   async reviewSupplyOrder(
-    orderId: number,
-    items: Array<{ supply_order_item_id: number; action: 'APPROVE' | 'PARTLY_APPROVE' | 'REJECT'; approved_quantity?: number }>
+    orderId: string,
+    items: Array<{ supply_order_item_id: string; action: 'APPROVE' | 'PARTLY_APPROVE' | 'REJECT'; approved_quantity?: number }>
   ): Promise<any> {
     const order = await supplyOrderRepository.findById(orderId);
     if (!order) {
@@ -95,7 +91,8 @@ export class SupplyOrderService {
     }
 
     const orderItems = await supplyOrderRepository.getItemsByOrderId(orderId);
-    const itemMap = new Map(orderItems.map(item => [item.supply_order_item_id, item]));
+    // use _id field as supply_order_item_id
+    const itemMap = new Map(orderItems.map(item => [(item as any)._id.toString(), item]));
 
     let approvedCount = 0;
     let rejectedCount = 0;
@@ -130,23 +127,23 @@ export class SupplyOrderService {
       }
 
       if (approvedQty !== null) {
-        const product = await productRepository.findById(originalItem.product_id);
+        const product = await productRepository.findById((originalItem as any).product.toString());
         if (!product) {
-          throw new Error(`Product with ID ${originalItem.product_id} not found`);
+          throw new Error(`Product with ID ${(originalItem as any).product.toString()} not found`);
         }
 
-        const availableQty = await inventoryRepository.getAvailableQuantityByProduct(originalItem.product_id);
+        const availableQty = await inventoryRepository.getAvailableQuantityByProduct((originalItem as any).product.toString());
         
-        const currentTotal = productQuantityMap.get(originalItem.product_id) || 0;
-        productQuantityMap.set(originalItem.product_id, currentTotal + approvedQty);
+        const currentTotal = productQuantityMap.get((originalItem as any).product.toString()) || 0;
+        productQuantityMap.set((originalItem as any).product.toString(), currentTotal + approvedQty);
         
-        const totalApproved = productQuantityMap.get(originalItem.product_id)!;
+        const totalApproved = productQuantityMap.get((originalItem as any).product.toString())!;
         
         if (totalApproved > availableQty) {
           throw new Error(`Cannot approve ${totalApproved} ${product.unit} of ${product.product_name}. Only ${availableQty} ${product.unit} available in inventory`);
         }
 
-        const batches = await supplyOrderRepository.getBatchesForProduct(originalItem.product_id);
+        const batches = await supplyOrderRepository.getBatchesForProduct((originalItem as any).product.toString());
         let remainingQty = approvedQty;
         
         for (const batch of batches) {
@@ -190,7 +187,7 @@ export class SupplyOrderService {
     return await supplyOrderRepository.findByIdWithItems(orderId);
   }
 
-  async startDelivery(orderId: number): Promise<any> {
+  async startDelivery(orderId: string): Promise<any> {
     const order = await supplyOrderRepository.findById(orderId);
     if (!order) {
       throw new Error('Supply order not found');
@@ -203,7 +200,7 @@ export class SupplyOrderService {
     
     for (const itemBatch of itemBatches) {
       if (itemBatch.quantity > 0) {
-        await supplyOrderRepository.deductInventory(itemBatch.inventory_id, itemBatch.quantity);
+        await supplyOrderRepository.deductInventory(itemBatch.inventory_id.toString(), itemBatch.quantity);
       }
     }
 
@@ -212,8 +209,8 @@ export class SupplyOrderService {
   }
 
   async confirmReceived(
-    orderId: number,
-    batches: Array<{ item_batch_id: number; receipted_quantity: number }>
+    orderId: string,
+    batches: Array<{ item_batch_id: string; receipted_quantity: number }>
   ): Promise<any> {
     const order = await supplyOrderRepository.findById(orderId);
     if (!order) {
@@ -245,8 +242,8 @@ export class SupplyOrderService {
   }
 
   async stockSupplyOrder(
-    orderId: number,
-    batches: Array<{ item_batch_id: number; stocked_quantity: number }>
+    orderId: string,
+    batches: Array<{ item_batch_id: string; stocked_quantity: number }>
   ): Promise<any> {
     const order = await supplyOrderRepository.findById(orderId);
     if (!order) {
@@ -287,8 +284,8 @@ export class SupplyOrderService {
 
       if (batchItem.stocked_quantity > 0) {
         await supplyOrderRepository.addInventoryToStore(
-          itemBatch.batch_id,
-          order.store_id,
+          itemBatch.batch_id.toString(),
+          order.store.toString(),
           batchItem.stocked_quantity
         );
       }
@@ -298,7 +295,7 @@ export class SupplyOrderService {
     return await supplyOrderRepository.findByIdWithItems(orderId);
   }
 
-  async cancelSupplyOrder(orderId: number): Promise<any> {
+  async cancelSupplyOrder(orderId: string): Promise<any> {
     const order = await supplyOrderRepository.findById(orderId);
     if (!order) {
       throw new Error('Supply order not found');

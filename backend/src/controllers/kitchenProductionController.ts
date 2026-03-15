@@ -44,8 +44,15 @@ export const createBatchPlans = async (req: Request, res: Response) => {
 
 export const produceBatch = async (req: Request, res: Response) => {
   try {
-    const batchId = parseInt(req.params.batchId as string);
+    const batchId = req.params.batchId as string;
     const { produced_quantity, production_date, expired_date } = req.body;
+
+    if (!batchId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid batch ID',
+      });
+    }
 
     if (!produced_quantity || !production_date || !expired_date) {
       return res.status(400).json({
@@ -76,8 +83,15 @@ export const produceBatch = async (req: Request, res: Response) => {
 
 export const stockBatch = async (req: Request, res: Response) => {
   try {
-    const batchId = parseInt(req.params.batchId as string);
+    const batchId = req.params.batchId as string;
     const { stocked_quantity } = req.body;
+
+    if (!batchId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid batch ID',
+      });
+    }
 
     if (!stocked_quantity) {
       return res.status(400).json({
@@ -103,7 +117,13 @@ export const stockBatch = async (req: Request, res: Response) => {
 
 export const cancelBatch = async (req: Request, res: Response) => {
   try {
-    const batchId = parseInt(req.params.batchId as string);
+    const batchId = req.params.batchId as string;
+    if (!batchId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid batch ID',
+      });
+    }
 
     const updatedBatch = await productBatchService.cancelBatch(batchId);
 

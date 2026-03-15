@@ -22,33 +22,51 @@ export class AuthController {
 
       const result = await this.authService.login(loginData);
 
-      res.json({
+      res.status(200).json({
         success: true,
-        data: result,
+        data: {
+          token: result.token,
+          user: result.user,
+        },
       });
-    } catch (error) {
-      if (error instanceof Error && error.message === 'Invalid credentials') {
+    } catch (error: any) {
+      const msg = String(error?.message ?? '');
+      const isDbError = error?.name === 'MongooseError' || /buffering|timed out|connection|ECONNREFUSED|ENOTFOUND/i.test(msg);
+      if (isDbError) {
+        console.error('Login error (database):', error?.message);
+        res.status(503).json({
+          success: false,
+          message: 'Database unavailable. Please ensure MongoDB is running (e.g. mongod or MongoDB service) and try again.',
+        });
+        return;
+      }
+      if (msg === 'Invalid credentials') {
         res.status(401).json({
           success: false,
           message: 'Invalid username or password',
         });
-      } else if (error instanceof Error && error.message === 'User account is inactive') {
+        return;
+      }
+      if (msg === 'User account is inactive') {
         res.status(403).json({
           success: false,
           message: 'User account is inactive',
         });
-      } else if (error instanceof Error && error.message.includes('store is inactive')) {
+        return;
+      }
+      if (msg.includes('store is inactive') || msg.includes('inactive')) {
         res.status(403).json({
           success: false,
-          message: error.message,
+          message: msg || 'Your store is inactive. Please contact administrator.',
         });
-      } else {
-        console.error('Login error:', error);
-        res.status(500).json({
-          success: false,
-          message: 'Internal server error',
-        });
+        return;
       }
+      console.error('Login error:', error);
+      const safeMessage = msg.trim() || 'An unexpected error occurred. Please try again.';
+      res.status(500).json({
+        success: false,
+        message: safeMessage,
+      });
     }
   };
 }

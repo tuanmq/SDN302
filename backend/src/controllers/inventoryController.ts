@@ -4,9 +4,8 @@ import inventoryService from '../services/inventoryService';
 export class InventoryController {
   getInventoryByStore = async (req: Request, res: Response): Promise<void> => {
     try {
-      const storeId = parseInt(req.params.storeId as string);
-      
-      if (isNaN(storeId)) {
+      const storeId = req.params.storeId as string;
+      if (!storeId) {
         res.status(400).json({
           success: false,
           message: 'Invalid store ID',
@@ -28,13 +27,29 @@ export class InventoryController {
     }
   };
 
+  getCentralKitchenInventory = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const inventory = await inventoryService.getCentralKitchenInventory();
+      res.json({
+        success: true,
+        data: inventory,
+      });
+    } catch (error) {
+      console.error('Get central kitchen inventory error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+      });
+    }
+  };
+
 
   disposeInventory = async (req: Request, res: Response): Promise<void> => {
     try {
-      const inventoryId = parseInt(req.params.inventoryId as string);
+      const inventoryId = req.params.inventoryId as string;
       const { disposed_reason } = req.body;
       
-      if (isNaN(inventoryId)) {
+      if (!inventoryId) {
         res.status(400).json({
           success: false,
           message: 'Invalid inventory ID',

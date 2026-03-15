@@ -1,38 +1,33 @@
-import { Pool } from 'pg';
+import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false 
-  },
-  max: 20, 
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+const mongoUri = process.env.MONGODB_URI || process.env.DATABASE_URL;
 
-pool.on('connect', () => {
-  console.log('Connected to Supabase PostgreSQL database');
-});
+if (!mongoUri) {
+  throw new Error('MongoDB connection string (MONGODB_URI) not specified in environment');
+}
 
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
-});
+mongoose.set('strictQuery', false);
 
-export const query = async (text: string, params?: any[]) => {
-  const start = Date.now();
-  try {
-    const res = await pool.query(text, params);
-    const duration = Date.now() - start;
-    console.log('Executed query', { text, duration, rows: res.rowCount });
-    return res;
-  } catch (error) {
-    console.error('Database query error:', error);
-    throw error;
+// helper function to connect and export
+export async function connectDatabase(): Promise<typeof mongoose> {
+  const uri = process.env.MONGODB_URI || process.env.DATABASE_URL;
+  if (!uri) {
+    throw new Error('MongoDB connection string (MONGODB_URI or DATABASE_URL) not specified in environment');
   }
-};
+  console.log('Connecting to MongoDB at', uri);
+  try {
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 10000,
+    });
+    console.log('Connected to MongoDB');
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  }
+  return mongoose;
+}
 
-export default pool;
+export default mongoose;

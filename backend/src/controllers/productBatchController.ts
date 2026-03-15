@@ -21,9 +21,9 @@ export class ProductBatchController {
 
   getBatchesByStore = async (req: Request, res: Response): Promise<void> => {
     try {
-      const storeId = parseInt(req.params.storeId as string);
+      const storeId = req.params.storeId as string;
       
-      if (isNaN(storeId)) {
+      if (!storeId) {
         res.status(400).json({
           success: false,
           message: 'Invalid store ID',

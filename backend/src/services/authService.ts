@@ -11,10 +11,10 @@ export interface LoginDto {
 export interface AuthResponse {
   token: string;
   user: {
-    user_id: number;
+    user_id: string;
     username: string;
     role_id: number;
-    store_id: number | null;
+    store_id: string | null;
   };
 }
 
@@ -31,9 +31,17 @@ export class AuthService {
 
   async login(loginData: LoginDto): Promise<AuthResponse> {
     const { username, password } = loginData;
+    if (!username || !password) {
+      throw new Error('Invalid credentials');
+    }
 
     const user = await this.userRepository.findByUsername(username);
     if (!user) {
+      throw new Error('Invalid credentials');
+    }
+
+    const hashedPassword = user.password;
+    if (!hashedPassword || typeof hashedPassword !== 'string') {
       throw new Error('Invalid credentials');
     }
 
@@ -41,24 +49,34 @@ export class AuthService {
       throw new Error('User account is inactive');
     }
 
-    if (user.store_id !== null) {
-      const store = await this.storeRepository.findById(user.store_id);
+    if (user.store_id) {
+      const store = await this.storeRepository.findById(user.store_id.toString());
       if (!store || !store.is_active) {
         throw new Error('Your store is inactive. Please contact administrator.');
       }
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    let isPasswordValid = false;
+    try {
+      isPasswordValid = await bcrypt.compare(password, hashedPassword);
+    } catch {
+      throw new Error('Invalid credentials');
+    }
     if (!isPasswordValid) {
+      throw new Error('Invalid credentials');
+    }
+
+    const userId = user._id?.toString?.();
+    if (!userId) {
       throw new Error('Invalid credentials');
     }
 
     const token = jwt.sign(
       {
-        user_id: user.user_id,
+        user_id: userId,
         username: user.username,
         role_id: user.role_id,
-        store_id: user.store_id,
+        store_id: user.store_id ? user.store_id.toString() : null,
       },
       this.jwtSecret,
       { expiresIn: '24h' }
@@ -67,10 +85,10 @@ export class AuthService {
     return {
       token,
       user: {
-        user_id: user.user_id,
+        user_id: userId,
         username: user.username,
         role_id: user.role_id,
-        store_id: user.store_id,
+        store_id: user.store_id ? user.store_id.toString() : null,
       },
     };
   }

@@ -1,99 +1,55 @@
-import pool from '../config/database';
-import { 
-  SupplyOrderItemBatch, 
-  CreateSupplyOrderItemBatchRequest} 
-  from '../models/SupplyOrderItemBatch';
+import { SupplyOrderItemBatchModel, ISupplyOrderItemBatch } from '../models/SupplyOrderItemBatch';
+import mongoose from 'mongoose';
 
-export const create = async (data: CreateSupplyOrderItemBatchRequest): Promise<SupplyOrderItemBatch> => {
-  const query = `
-    INSERT INTO supply_order_item_batch 
-      (supply_order_item_id, batch_id, inventory_id, quantity)
-    VALUES ($1, $2, $3, $4)
-    RETURNING *
-  `;
-  
-  const result = await pool.query(query, [
-    data.supply_order_item_id,
-    data.batch_id,
-    data.inventory_id,
-    data.quantity
+export const create = async (data: {
+  supply_order_item_id: string;
+  batch_id: string;
+  inventory_id: string;
+  quantity: number;
+}): Promise<ISupplyOrderItemBatch> => {
+  const item = new SupplyOrderItemBatchModel({
+    supply_order_item: data.supply_order_item_id,
+    batch_id: data.batch_id,
+    inventory_id: data.inventory_id,
+    quantity: data.quantity
+  });
+  await item.save();
+  return item.toObject();
+};
+
+export const findBySupplyOrderItemId = async (supplyOrderItemId: string): Promise<ISupplyOrderItemBatch[]> => {
+  return SupplyOrderItemBatchModel.find({ supply_order_item: supplyOrderItemId })
+    .populate('batch_id', 'batch_code')
+    .lean();
+};
+
+export const findBySupplyOrderId = async (supplyOrderId: string): Promise<ISupplyOrderItemBatch[]> => {
+  // require lookups via SupplyOrderModel or Aggregation
+  const items = await SupplyOrderItemBatchModel.aggregate([
+    {
+      $lookup: {
+        from: 'supplyorders',
+        localField: 'supply_order_item',
+        foreignField: 'items._id',
+        as: 'parentOrder'
+      }
+    },
+    { $unwind: '$parentOrder' },
+    { $match: { 'parentOrder._id': new mongoose.Types.ObjectId(supplyOrderId) } }
   ]);
-  
-  return result.rows[0];
+  return items as any;
 };
 
-export const findBySupplyOrderItemId = async (supplyOrderItemId: number): Promise<SupplyOrderItemBatch[]> => {
-  const query = `
-    SELECT 
-      soib.*,
-      pb.batch_code,
-      p.product_name
-    FROM supply_order_item_batch soib
-    LEFT JOIN product_batch pb ON soib.batch_id = pb.batch_id
-    LEFT JOIN product p ON pb.product_id = p.product_id
-    WHERE soib.supply_order_item_id = $1
-    ORDER BY soib.created_at ASC
-  `;
-  
-  const result = await pool.query(query, [supplyOrderItemId]);
-  return result.rows;
+export const updateReceiptedQuantity = async (itemBatchId: string, receiptedQuantity: number): Promise<ISupplyOrderItemBatch | null> => {
+  return SupplyOrderItemBatchModel.findByIdAndUpdate(itemBatchId, { receipted_quantity: receiptedQuantity }, { new: true }).lean();
 };
 
-export const findBySupplyOrderId = async (supplyOrderId: number): Promise<SupplyOrderItemBatch[]> => {
-  const query = `
-    SELECT 
-      soib.*,
-      pb.batch_code,
-      p.product_name,
-      soi.supply_order_item_id
-    FROM supply_order_item_batch soib
-    INNER JOIN supply_order_item soi ON soib.supply_order_item_id = soi.supply_order_item_id
-    LEFT JOIN product_batch pb ON soib.batch_id = pb.batch_id
-    LEFT JOIN product p ON pb.product_id = p.product_id
-    WHERE soi.supply_order_id = $1
-    ORDER BY soi.supply_order_item_id, soib.created_at ASC
-  `;
-  
-  const result = await pool.query(query, [supplyOrderId]);
-  return result.rows;
+export const updateStockedQuantity = async (itemBatchId: string, stockedQuantity: number): Promise<ISupplyOrderItemBatch | null> => {
+  return SupplyOrderItemBatchModel.findByIdAndUpdate(itemBatchId, { stocked_quantity: stockedQuantity }, { new: true }).lean();
 };
 
-export const updateReceiptedQuantity = async (itemBatchId: number, receiptedQuantity: number): Promise<SupplyOrderItemBatch> => {
-  const query = `
-    UPDATE supply_order_item_batch
-    SET receipted_quantity = $1
-    WHERE item_batch_id = $2
-    RETURNING *
-  `;
-  
-  const result = await pool.query(query, [receiptedQuantity, itemBatchId]);
-  return result.rows[0];
-};
-
-export const updateStockedQuantity = async (itemBatchId: number, stockedQuantity: number): Promise<SupplyOrderItemBatch> => {
-  const query = `
-    UPDATE supply_order_item_batch
-    SET stocked_quantity = $1
-    WHERE item_batch_id = $2
-    RETURNING *
-  `;
-  
-  const result = await pool.query(query, [stockedQuantity, itemBatchId]);
-  return result.rows[0];
-};
-
-export const findById = async (itemBatchId: number): Promise<SupplyOrderItemBatch | null> => {
-  const query = `
-    SELECT 
-      soib.*,
-      pb.batch_code,
-      p.product_name
-    FROM supply_order_item_batch soib
-    LEFT JOIN product_batch pb ON soib.batch_id = pb.batch_id
-    LEFT JOIN product p ON pb.product_id = p.product_id
-    WHERE soib.item_batch_id = $1
-  `;
-  
-  const result = await pool.query(query, [itemBatchId]);
-  return result.rows[0] || null;
+export const findById = async (itemBatchId: string): Promise<ISupplyOrderItemBatch | null> => {
+  return SupplyOrderItemBatchModel.findById(itemBatchId)
+    .populate('batch_id', 'batch_code')
+    .lean();
 };

@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import pool from './config/database';
 import authRouter from './routers/authRouter';
 import userRouter from './routers/userRouter';
 import storeRouter from './routers/storeRouter';
@@ -28,27 +27,40 @@ app.use('/api/supply-orders', supplyOrderRouter);
 app.use('/api/kitchen-production', kitchenProductionRouter);
 
 app.get('/api/health', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT NOW()');
-    res.json({
-      status: 'OK',
-      message: 'Central Kitchen Management API is running',
-      database: 'Connected',
-      timestamp: result.rows[0].now
-    });
-  } catch (error) {
-    res.status(500).json({
-      status: 'ERROR',
-      message: 'API is running but database connection failed',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
+  const mongoose = require('./config/database').default;
+  const state = mongoose.connection.readyState; // 0 disconnected, 1 connected
+  res.json({
+    status: state === 1 ? 'OK' : 'ERROR',
+    message: 'Central Kitchen Management API is running',
+    database: state === 1 ? 'Connected' : 'Disconnected',
+    timestamp: new Date()
+  });
+});
+
+// Global error handler: avoid generic "Internal server error" without details
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('Unhandled error:', err);
+  const msg = err?.message && String(err.message).trim() ? String(err.message) : 'An unexpected error occurred. Please try again.';
+  res.status(res.headersSent ? 500 : (res.statusCode || 500)).json({
+    success: false,
+    message: msg,
+  });
 });
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// connect to DB then start server
+import { connectDatabase } from './config/database';
+
+connectDatabase()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })
+  .catch((e) => {
+    console.error('Failed to start application because DB connection failed', e);
+  });
 
 export default app;
+   

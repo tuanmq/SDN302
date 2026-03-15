@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
-export const requireRole = (...allowedRoles: number[]) => {
+export const requireRole = (...allowedRoles: string[]) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({
@@ -10,7 +10,7 @@ export const requireRole = (...allowedRoles: number[]) => {
       return;
     }
 
-    if (!allowedRoles.includes(req.user.role_id)) {
+    if (!allowedRoles.includes(req.user.role_id?.toString())) {
       res.status(403).json({
         success: false,
         message: 'Access denied. Insufficient permissions.',
@@ -22,7 +22,7 @@ export const requireRole = (...allowedRoles: number[]) => {
   };
 };
 
-export const requireStore = (storeId: number) => {
+export const requireStore = (storeId: string) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({
@@ -32,7 +32,7 @@ export const requireStore = (storeId: number) => {
       return;
     }
 
-    if (req.user.store_id !== storeId) {
+    if (req.user.store_id?.toString() !== storeId) {
       res.status(403).json({
         success: false,
         message: 'Access denied. You do not have access to this store.',

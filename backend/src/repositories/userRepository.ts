@@ -1,92 +1,38 @@
-import pool from '../config/database';
-import { User, UserCreateDto, UserUpdateDto } from '../models/User';
+import { UserModel, IUser } from '../models/User';
 
 export class UserRepository {
-  async findAll(): Promise<User[]> {
-    const result = await pool.query(
-      'SELECT * FROM "user" ORDER BY created_at DESC'
-    );
-    return result.rows;
+  async findAll(): Promise<IUser[]> {
+    return UserModel.find().sort({ created_at: -1 }).lean();
   }
 
-  async findById(userId: number): Promise<User | null> {
-    const result = await pool.query(
-      'SELECT * FROM "user" WHERE user_id = $1',
-      [userId]
-    );
-    return result.rows[0] || null;
+  async findById(userId: string): Promise<IUser | null> {
+    return UserModel.findById(userId).lean();
   }
 
-  async findByUsername(username: string): Promise<User | null> {
-    const result = await pool.query(
-      'SELECT * FROM "user" WHERE username = $1',
-      [username]
-    );
-    return result.rows[0] || null;
+  async findByUsername(username: string): Promise<IUser | null> {
+    if (!username || typeof username !== 'string') return null;
+    const trimmed = username.trim();
+    if (!trimmed) return null;
+    return UserModel.findOne({ username: new RegExp('^' + trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }).lean();
   }
 
-  async findByUserCode(userCode: string): Promise<User | null> {
-    const result = await pool.query(
-      'SELECT * FROM "user" WHERE user_code = $1',
-      [userCode]
-    );
-    return result.rows[0] || null;
+  async findByUserCode(userCode: string): Promise<IUser | null> {
+    return UserModel.findOne({ user_code: userCode.toUpperCase() }).lean();
   }
 
-  async create(userData: UserCreateDto): Promise<User> {
-    const { user_code, username, password, role_id, store_id, is_active = true } = userData;
-    const result = await pool.query(
-      `INSERT INTO "user" (user_code, username, password, role_id, store_id, is_active) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
-       RETURNING *`,
-      [user_code, username, password, role_id, store_id, is_active]
-    );
-    return result.rows[0];
+  async create(userData: Partial<IUser>): Promise<IUser> {
+    const user = new UserModel(userData);
+    await user.save();
+    return user.toObject();
   }
 
-  async update(userId: number, userData: UserUpdateDto): Promise<User | null> {
-    const fields: string[] = [];
-    const values: any[] = [];
-    let paramCount = 1;
-
-    if (userData.username !== undefined) {
-      fields.push(`username = $${paramCount++}`);
-      values.push(userData.username);
-    }
-    if (userData.password !== undefined) {
-      fields.push(`password = $${paramCount++}`);
-      values.push(userData.password);
-    }
-    if (userData.role_id !== undefined) {
-      fields.push(`role_id = $${paramCount++}`);
-      values.push(userData.role_id);
-    }
-    if (userData.store_id !== undefined) {
-      fields.push(`store_id = $${paramCount++}`);
-      values.push(userData.store_id);
-    }
-    if (userData.is_active !== undefined) {
-      fields.push(`is_active = $${paramCount++}`);
-      values.push(userData.is_active);
-    }
-
-    if (fields.length === 0) {
-      return this.findById(userId);
-    }
-
-    values.push(userId);
-    const result = await pool.query(
-      `UPDATE "user" SET ${fields.join(', ')} WHERE user_id = $${paramCount} RETURNING *`,
-      values
-    );
-    return result.rows[0] || null;
+  async update(userId: string, userData: Partial<IUser>): Promise<IUser | null> {
+    const updated = await UserModel.findByIdAndUpdate(userId, userData, { new: true }).lean();
+    return updated;
   }
 
-  async delete(userId: number): Promise<boolean> {
-    const result = await pool.query(
-      'DELETE FROM "user" WHERE user_id = $1',
-      [userId]
-    );
-    return result.rowCount !== null && result.rowCount > 0;
+  async delete(userId: string): Promise<boolean> {
+    const res = await UserModel.findByIdAndDelete(userId);
+    return res !== null;
   }
 }

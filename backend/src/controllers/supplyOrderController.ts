@@ -3,12 +3,72 @@ import supplyOrderService from '../services/supplyOrderService';
 import { SupplyOrderCreateDto } from '../models/SupplyOrder';
 
 interface AuthRequest extends Request {
-  user?: {
-    user_id: number;
-    username: string;
-    role_id: number;
-    store_id: number | null;
+  // user attached by jwtMiddleware, fields may be strings
+  user?: any;
+}
+
+/** Chuẩn hóa order từ Mongoose (populate store, created_by, items.product) sang format API cho FE */
+function mapOrderForResponse(order: any): any {
+  if (!order) return order;
+  const storeObj = order.store;
+  const storeId = storeObj && typeof storeObj === 'object'
+    ? (storeObj._id ?? storeObj)?.toString?.() ?? ''
+    : (order.store_id ?? (order.store?.toString?.() ?? order.store ?? ''));
+  const storeName = storeObj && typeof storeObj === 'object' && (storeObj.store_name != null)
+    ? storeObj.store_name
+    : (order.store_name ?? '');
+
+  const createdByObj = order.created_by;
+  const createdById = createdByObj && typeof createdByObj === 'object'
+    ? (createdByObj._id ?? createdByObj)?.toString?.() ?? ''
+    : (order.created_by?.toString?.() ?? order.created_by ?? '');
+  const createdByUsername = createdByObj && typeof createdByObj === 'object' && (createdByObj.username != null)
+    ? createdByObj.username
+    : (order.created_by_username ?? '');
+
+  const items = Array.isArray(order.items) ? order.items.map((item: any) => {
+    const productObj = item.product;
+    const productId = productObj && typeof productObj === 'object'
+      ? (productObj._id ?? productObj)?.toString?.() ?? ''
+      : (item.product_id ?? (item.product?.toString?.() ?? item.product ?? ''));
+    const productName = productObj && typeof productObj === 'object' ? (productObj.product_name ?? '') : (item.product_name ?? '');
+    const productCode = productObj && typeof productObj === 'object' ? (productObj.product_code ?? '') : (item.product_code ?? '');
+    const unit = productObj && typeof productObj === 'object' ? (productObj.unit ?? '') : (item.unit ?? '');
+    return {
+      ...item,
+      supply_order_item_id: item.supply_order_item_id ?? item._id?.toString?.() ?? item._id,
+      product_id: productId,
+      product_name: productName,
+      product_code: productCode,
+      unit,
+    };
+  }) : (order.items ?? []);
+
+  return {
+    ...order,
+    store_id: storeId,
+    store_name: storeName,
+    created_by: createdById,
+    created_by_username: createdByUsername,
+    items,
   };
+}
+
+/** Parse query params from, to (YYYY-MM-DD) for date filter */
+function parseDateRange(req: Request): { from?: Date; to?: Date } {
+  const fromStr = req.query.from as string | undefined;
+  const toStr = req.query.to as string | undefined;
+  let from: Date | undefined;
+  let to: Date | undefined;
+  if (fromStr) {
+    from = new Date(fromStr);
+    if (Number.isNaN(from.getTime())) from = undefined;
+  }
+  if (toStr) {
+    to = new Date(toStr);
+    if (Number.isNaN(to.getTime())) to = undefined;
+  }
+  return { from, to };
 }
 
 export class SupplyOrderController {
@@ -42,7 +102,21 @@ export class SupplyOrderController {
 
       const orderData: SupplyOrderCreateDto = req.body;
 
-      if (!orderData.items || orderData.items.length === 0) {
+      if (!orderData || typeof orderData !== 'object') {
+        res.status(400).json({
+          success: false,
+          message: 'Invalid request body',
+        });
+        return;
+      }
+      if (!orderData.supply_order_code || !String(orderData.supply_order_code).trim()) {
+        res.status(400).json({
+          success: false,
+          message: 'Supply order code is required',
+        });
+        return;
+      }
+      if (!orderData.items || !Array.isArray(orderData.items) || orderData.items.length === 0) {
         res.status(400).json({
           success: false,
           message: 'Supply order must have at least one item',
@@ -51,14 +125,14 @@ export class SupplyOrderController {
       }
 
       const supplyOrder = await supplyOrderService.createSupplyOrder(
-        user.store_id,
-        user.user_id,
+        user.store_id as string,
+        user.user_id as string,
         orderData
       );
 
       res.status(201).json({
         success: true,
-        data: supplyOrder,
+        data: mapOrderForResponse(supplyOrder),
         message: 'Supply order created successfully',
       });
     } catch (error: any) {
@@ -82,9 +156,9 @@ export class SupplyOrderController {
         return;
       }
 
-      const orderId = parseInt(req.params.id as string);
+      const orderId = (req.params.id as string)?.trim?.();
 
-      if (isNaN(orderId)) {
+      if (!orderId || orderId === 'undefined' || orderId === 'null') {
         res.status(400).json({
           success: false,
           message: 'Invalid order ID',
@@ -94,7 +168,10 @@ export class SupplyOrderController {
 
       const order = await supplyOrderService.getSupplyOrderById(orderId);
 
-      if (user.role_id === 3 && order.store_id !== user.store_id) {
+      // order.store may be populated { _id, store_name } so use store._id when store_id not set
+      const orderStoreId = String(order.store_id ?? order.store?._id ?? '').trim();
+      const userStoreId = String(user.store_id ?? '').trim();
+      if (user.role_id === 3 && orderStoreId !== userStoreId) {
         res.status(403).json({
           success: false,
           message: 'You can only view orders from your store',
@@ -102,9 +179,11 @@ export class SupplyOrderController {
         return;
       }
 
+      const raw = { ...order, supply_order_id: order.supply_order_id ?? order._id?.toString?.() ?? order._id };
+      const data = mapOrderForResponse(raw);
       res.json({
         success: true,
-        data: order,
+        data,
       });
     } catch (error: any) {
       console.error('Get supply order error:', error);
@@ -125,6 +204,7 @@ export class SupplyOrderController {
   getAllSupplyOrders = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const user = req.user;
+      const { from, to } = parseDateRange(req);
 
       if (!user) {
         res.status(401).json({
@@ -136,9 +216,9 @@ export class SupplyOrderController {
 
       let orders;
       if (user.role_id === 1) {
-        orders = await supplyOrderService.getAllSupplyOrders();
+        orders = await supplyOrderService.getAllSupplyOrders(from, to);
       } else if (user.role_id === 3 && user.store_id) {
-        orders = await supplyOrderService.getSupplyOrdersByStore(user.store_id);
+        orders = await supplyOrderService.getSupplyOrdersByStore(user.store_id.toString(), from, to);
       } else {
         res.status(403).json({
           success: false,
@@ -163,6 +243,7 @@ export class SupplyOrderController {
   getAllSupplyOrdersCentral = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const user = req.user;
+      const { from, to } = parseDateRange(req);
 
       if (!user) {
         res.status(401).json({
@@ -173,10 +254,13 @@ export class SupplyOrderController {
       }
 
       if (user.role_id === 1 || user.role_id === 2) {
-        const orders = await supplyOrderService.getAllSupplyOrders();
+        const orders = await supplyOrderService.getAllSupplyOrders(from, to);
+        const data = Array.isArray(orders)
+          ? orders.map((o: any) => mapOrderForResponse({ ...o, supply_order_id: o.supply_order_id ?? o._id?.toString?.() ?? o._id }))
+          : orders;
         res.json({
           success: true,
-          data: orders,
+          data,
         });
       } else {
         res.status(403).json({
@@ -196,6 +280,7 @@ export class SupplyOrderController {
   getSupplyOrdersByStore = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const user = req.user;
+      const { from, to } = parseDateRange(req);
 
       if (!user) {
         res.status(401).json({
@@ -205,9 +290,8 @@ export class SupplyOrderController {
         return;
       }
 
-      const storeId = parseInt(req.params.storeId as string);
-
-      if (isNaN(storeId)) {
+      const storeId = req.params.storeId as string;
+      if (!storeId) {
         res.status(400).json({
           success: false,
           message: 'Invalid store ID',
@@ -223,11 +307,12 @@ export class SupplyOrderController {
         return;
       }
 
-      const orders = await supplyOrderService.getSupplyOrdersByStore(storeId);
+      const orders = await supplyOrderService.getSupplyOrdersByStore(storeId, from, to);
+      const data = Array.isArray(orders) ? orders.map((o: any) => mapOrderForResponse({ ...o, supply_order_id: o.supply_order_id ?? o._id?.toString?.() ?? o._id })) : orders;
 
       res.json({
         success: true,
-        data: orders,
+        data,
       });
     } catch (error) {
       console.error('Get supply orders by store error:', error);
@@ -258,8 +343,8 @@ export class SupplyOrderController {
         return;
       }
 
-      const orderId = parseInt(req.params.id as string);
-      if (isNaN(orderId)) {
+      const orderId = (req.params.id as string)?.trim?.();
+      if (!orderId || orderId === 'undefined' || orderId === 'null') {
         res.status(400).json({
           success: false,
           message: 'Invalid order ID',
@@ -280,7 +365,7 @@ export class SupplyOrderController {
 
       res.json({
         success: true,
-        data: order,
+        data: mapOrderForResponse(order),
         message: 'Supply order reviewed successfully',
       });
     } catch (error: any) {
@@ -315,8 +400,8 @@ export class SupplyOrderController {
         return;
       }
 
-      const orderId = parseInt(req.params.id as string);
-      if (isNaN(orderId)) {
+      const orderId = (req.params.id as string)?.trim?.();
+      if (!orderId || orderId === 'undefined' || orderId === 'null') {
         res.status(400).json({
           success: false,
           message: 'Invalid order ID',
@@ -328,7 +413,7 @@ export class SupplyOrderController {
 
       res.json({
         success: true,
-        data: order,
+        data: mapOrderForResponse(order),
         message: 'Delivery started successfully',
       });
     } catch (error: any) {
@@ -363,8 +448,8 @@ export class SupplyOrderController {
         return;
       }
 
-      const orderId = parseInt(req.params.id as string);
-      if (isNaN(orderId)) {
+      const orderId = (req.params.id as string)?.trim?.();
+      if (!orderId || orderId === 'undefined' || orderId === 'null') {
         res.status(400).json({
           success: false,
           message: 'Invalid order ID',
@@ -385,7 +470,7 @@ export class SupplyOrderController {
 
       res.json({
         success: true,
-        data: order,
+        data: mapOrderForResponse(order),
         message: 'Order confirmed as received successfully',
       });
     } catch (error: any) {
@@ -420,8 +505,8 @@ export class SupplyOrderController {
         return;
       }
 
-      const orderId = parseInt(req.params.id as string);
-      if (isNaN(orderId)) {
+      const orderId = (req.params.id as string)?.trim?.();
+      if (!orderId || orderId === 'undefined' || orderId === 'null') {
         res.status(400).json({
           success: false,
           message: 'Invalid order ID',
@@ -442,7 +527,7 @@ export class SupplyOrderController {
 
       res.json({
         success: true,
-        data: order,
+        data: mapOrderForResponse(order),
         message: 'Order stocked successfully',
       });
     } catch (error: any) {
@@ -477,8 +562,8 @@ export class SupplyOrderController {
         return;
       }
 
-      const orderId = parseInt(req.params.id as string);
-      if (isNaN(orderId)) {
+      const orderId = (req.params.id as string)?.trim?.();
+      if (!orderId || orderId === 'undefined' || orderId === 'null') {
         res.status(400).json({
           success: false,
           message: 'Invalid order ID',
@@ -490,7 +575,7 @@ export class SupplyOrderController {
 
       res.json({
         success: true,
-        data: order,
+        data: mapOrderForResponse(order),
         message: 'Supply order cancelled successfully',
       });
     } catch (error: any) {

@@ -6,8 +6,9 @@ import { requireRole } from '../middlewares/authMiddleware';
 const router = Router();
 
 router.use(jwtMiddleware);
-router.use(requireRole(1, 2, 3)); 
+router.use(requireRole('1', '2', '3'));
 
+router.get('/central', inventoryController.getCentralKitchenInventory);
 router.get('/store/:storeId', inventoryController.getInventoryByStore);
 router.put('/:inventoryId/dispose', inventoryController.disposeInventory);
 router.post('/update-statuses', inventoryController.updateStatuses);

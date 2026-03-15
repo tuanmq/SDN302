@@ -1,77 +1,68 @@
-import pool from '../config/database';
-import { ProductBatch, ProductBatchCreateDto, ProductBatchUpdateDto } from '../models/ProductBatch';
+import mongoose from 'mongoose';
+import { ProductBatchModel, IProductBatch } from '../models/ProductBatch';
 
 export class ProductBatchRepository {
-  async findById(batchId: number): Promise<ProductBatch | null> {
-    const query = 'SELECT * FROM product_batch WHERE batch_id = $1';
-    const result = await pool.query(query, [batchId]);
-    return result.rows[0] || null;
+  async findById(batchId: string): Promise<IProductBatch | null> {
+    return ProductBatchModel.findById(batchId).lean();
   }
 
-  async findByBatchCode(batchCode: string): Promise<ProductBatch | null> {
-    const query = 'SELECT * FROM product_batch WHERE batch_code = $1';
-    const result = await pool.query(query, [batchCode]);
-    return result.rows[0] || null;
+  async findByBatchCode(batchCode: string): Promise<IProductBatch | null> {
+    return ProductBatchModel.findOne({ batch_code: batchCode }).lean();
   }
 
-  async create(batchData: ProductBatchCreateDto): Promise<ProductBatch> {
-    const query = `
-      INSERT INTO product_batch (batch_code, product_id, planned_quantity, status)
-      VALUES ($1, $2, $3, 'PLANNED')
-      RETURNING *
-    `;
-    
-    const result = await pool.query(query, [
-      batchData.batch_code,
-      batchData.product_id,
-      batchData.planned_quantity
-    ]);
-    
-    return result.rows[0];
+  async create(batchData: Partial<IProductBatch> & { product_id?: string }): Promise<IProductBatch> {
+    const { product_id, ...rest } = batchData as any;
+    const batch = new ProductBatchModel({
+      ...rest,
+      product: product_id ? new mongoose.Types.ObjectId(product_id) : batchData.product,
+      status: 'PLANNED'
+    });
+    await batch.save();
+    return batch.toObject();
   }
 
-  async update(batchId: number, updateData: ProductBatchUpdateDto): Promise<ProductBatch | null> {
-    const fields: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
-
-    if (updateData.production_date !== undefined) {
-      fields.push(`production_date = $${paramIndex++}`);
-      values.push(updateData.production_date);
-    }
-    if (updateData.expired_date !== undefined) {
-      fields.push(`expired_date = $${paramIndex++}`);
-      values.push(updateData.expired_date);
-    }
-    if (updateData.status !== undefined) {
-      fields.push(`status = $${paramIndex++}`);
-      values.push(updateData.status);
-    }
-    if (updateData.produced_quantity !== undefined) {
-      fields.push(`produced_quantity = $${paramIndex++}`);
-      values.push(updateData.produced_quantity);
-    }
-
-    if (fields.length === 0) {
+  async update(batchId: string, updateData: Partial<IProductBatch>): Promise<IProductBatch | null> {
+    const updates: any = { ...updateData };
+    if (Object.keys(updates).length === 0) {
       return this.findById(batchId);
     }
-
-    values.push(batchId);
-    const query = `
-      UPDATE product_batch
-      SET ${fields.join(', ')}
-      WHERE batch_id = $${paramIndex}
-      RETURNING *
-    `;
-
-    const result = await pool.query(query, values);
-    return result.rows[0] || null;
+    return ProductBatchModel.findByIdAndUpdate(batchId, updates, { new: true }).lean();
   }
 
-  async delete(batchId: number): Promise<boolean> {
-    const query = 'DELETE FROM product_batch WHERE batch_id = $1';
-    const result = await pool.query(query, [batchId]);
-    return result.rowCount !== null && result.rowCount > 0;
+  async delete(batchId: string): Promise<boolean> {
+    const res = await ProductBatchModel.findByIdAndDelete(batchId);
+    return res !== null;
+  }
+
+  // returns batches with product name/unit information similar to previous SQL join
+  async findAllPlans(): Promise<any[]> {
+    return ProductBatchModel.aggregate([
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'product',
+          foreignField: '_id',
+          as: 'product_info'
+        }
+      },
+      { $unwind: { path: '$product_info', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          batch_id: '$_id',
+          batch_code: 1,
+          product_id: '$product_info._id',
+          status: 1,
+          planned_quantity: 1,
+          produced_quantity: 1,
+          production_date: 1,
+          expired_date: 1,
+          created_at: 1,
+          product_name: '$product_info.product_name',
+          unit: '$product_info.unit'
+        }
+      },
+      { $sort: { created_at: -1 } }
+    ]);
   }
 }
 

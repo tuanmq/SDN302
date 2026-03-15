@@ -1,19 +1,20 @@
 import productBatchRepository from '../repositories/productBatchRepository';
 import inventoryRepository from '../repositories/inventoryRepository';
-import { ProductBatchCreateDto, ProductBatchWithDetails, ProductBatch } from '../models/ProductBatch';
+import { StoreModel } from '../models/Store';
+import { ProductBatchCreateDto, ProductBatchWithDetails, IProductBatch } from '../models/ProductBatch';
 
 export class ProductBatchService {
-  async getAllBatchesWithDetails(storeId: number = 1): Promise<ProductBatchWithDetails[]> {
+  async getAllBatchesWithDetails(storeId: string = ''): Promise<ProductBatchWithDetails[]> {
     await inventoryRepository.updateExpiredStatuses();
     return await inventoryRepository.findAllWithDetails(storeId);
   }
 
-  async getBatchesByStore(storeId: number): Promise<ProductBatchWithDetails[]> {
+  async getBatchesByStore(storeId: string): Promise<ProductBatchWithDetails[]> {
     await inventoryRepository.updateExpiredStatuses();
     return await inventoryRepository.findAllWithDetails(storeId);
   }
 
-  async createBatchPlans(batchesData: ProductBatchCreateDto[]): Promise<ProductBatch[]> {
+  async createBatchPlans(batchesData: ProductBatchCreateDto[]): Promise<IProductBatch[]> {
     const batchCodes = batchesData.map(b => b.batch_code.toUpperCase());
     const duplicates = batchCodes.filter((code, index) => batchCodes.indexOf(code) !== index);
     if (duplicates.length > 0) {
@@ -24,17 +25,17 @@ export class ProductBatchService {
       await this.validateBatchPlan(batchData);
     }
 
-    const createdBatches: ProductBatch[] = [];
+    const createdBatches: IProductBatch[] = [];
 
     for (const batchData of batchesData) {
-      const batch = await productBatchRepository.create(batchData);
+      const batch = await productBatchRepository.create(batchData as any);
       createdBatches.push(batch);
     }
 
     return createdBatches;
   }
 
-  async produceBatch(batchId: number, producedQuantity: number, productionDate: Date, expiredDate: Date): Promise<ProductBatch> {
+  async produceBatch(batchId: string, producedQuantity: number, productionDate: Date, expiredDate: Date): Promise<IProductBatch> {
     const batch = await productBatchRepository.findById(batchId);
     if (!batch) {
       throw new Error('Batch not found');
@@ -44,7 +45,7 @@ export class ProductBatchService {
       throw new Error('Only PLANNED batches can be produced');
     }
 
-    if (producedQuantity <= 0 || producedQuantity > batch.planned_quantity) {
+    if (producedQuantity <= 0 || producedQuantity > batch.planned_quantity!) {
       throw new Error(`Produced quantity must be between 1 and ${batch.planned_quantity}`);
     }
 
@@ -72,7 +73,7 @@ export class ProductBatchService {
       production_date: productionDate,
       expired_date: expiredDate,
       status: 'PRODUCED'
-    });
+    } as any);
 
     if (!updatedBatch) {
       throw new Error('Failed to update batch');
@@ -81,7 +82,7 @@ export class ProductBatchService {
     return updatedBatch;
   }
 
-  async stockBatch(batchId: number, stockedQuantity: number): Promise<ProductBatch> {
+  async stockBatch(batchId: string, stockedQuantity: number): Promise<IProductBatch> {
     const batch = await productBatchRepository.findById(batchId);
     if (!batch) {
       throw new Error('Batch not found');
@@ -95,20 +96,25 @@ export class ProductBatchService {
       throw new Error(`Stocked quantity must be between 1 and ${batch.produced_quantity}`);
     }
 
-    const existingInventory = await inventoryRepository.findByStoreAndBatch(1, batchId);
+    const centralStore = await StoreModel.findOne({ store_name: 'Central Kitchen' }).lean();
+    if (!centralStore) {
+      throw new Error('Central Kitchen store not found. Please create it first.');
+    }
+    const centralStoreId = centralStore._id.toString();
+    const existingInventory = await inventoryRepository.findByStoreAndBatch(centralStoreId, batchId);
     if (existingInventory) {
       throw new Error('Batch has already been stocked');
     }
 
     await inventoryRepository.create({
-      store_id: 1, 
-      batch_id: batchId,
+      store: centralStore._id,
+      batch: batchId,
       quantity: stockedQuantity
-    });
+    } as any);
 
     const updatedBatch = await productBatchRepository.update(batchId, {
       status: 'STOCKED'
-    });
+    } as any);
 
     if (!updatedBatch) {
       throw new Error('Failed to update batch');
@@ -117,7 +123,7 @@ export class ProductBatchService {
     return updatedBatch;
   }
 
-  async cancelBatch(batchId: number): Promise<ProductBatch> {
+  async cancelBatch(batchId: string): Promise<IProductBatch> {
     const batch = await productBatchRepository.findById(batchId);
     if (!batch) {
       throw new Error('Batch not found');
@@ -129,7 +135,7 @@ export class ProductBatchService {
 
     const updatedBatch = await productBatchRepository.update(batchId, {
       status: 'CANCELLED'
-    });
+    } as any);
 
     if (!updatedBatch) {
       throw new Error('Failed to update batch');
@@ -139,27 +145,8 @@ export class ProductBatchService {
   }
 
   async getAllBatchPlans(): Promise<any[]> {
-    const query = `
-      SELECT 
-        pb.batch_id,
-        pb.batch_code,
-        pb.product_id,
-        pb.status,
-        pb.planned_quantity,
-        pb.produced_quantity,
-        pb.production_date,
-        pb.expired_date,
-        pb.created_at,
-        p.product_name,
-        p.unit
-      FROM product_batch pb
-      JOIN product p ON pb.product_id = p.product_id
-      ORDER BY pb.created_at DESC
-    `;
-    
-    const pool = require('../config/database').default;
-    const result = await pool.query(query);
-    return result.rows;
+    // use mongoose aggregation instead of raw SQL
+    return productBatchRepository.findAllPlans ? await productBatchRepository.findAllPlans() : [];
   }
 
   private async validateBatchPlan(batchData: ProductBatchCreateDto): Promise<void> {

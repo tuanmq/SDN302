@@ -33,9 +33,9 @@ export class StoreController {
 
   getStoreById = async (req: Request, res: Response): Promise<void> => {
     try {
-      const storeId = parseInt(req.params.id as string);
-      
-      if (isNaN(storeId)) {
+      const storeId = req.params.id as string;
+
+      if (!storeId) {
         res.status(400).json({
           success: false,
           message: 'Invalid store ID',
@@ -112,9 +112,9 @@ export class StoreController {
 
   updateStore = async (req: Request, res: Response): Promise<void> => {
     try {
-      const storeId = parseInt(req.params.id as string);
+      const storeId = req.params.id as string;
       
-      if (isNaN(storeId)) {
+      if (!storeId) {
         res.status(400).json({
           success: false,
           message: 'Invalid store ID',
@@ -167,10 +167,10 @@ export class StoreController {
 
   toggleStoreStatus = async (req: Request, res: Response): Promise<void> => {
     try {
-      const storeId = parseInt(req.params.id as string);
+      const storeId = req.params.id as string;
       const { is_active } = req.body;
       
-      if (isNaN(storeId)) {
+      if (!storeId) {
         res.status(400).json({
           success: false,
           message: 'Invalid store ID',
@@ -211,9 +211,9 @@ export class StoreController {
 
   deleteStore = async (req: Request, res: Response): Promise<void> => {
     try {
-      const storeId = parseInt(req.params.id as string);
+      const storeId = req.params.id as string;
       
-      if (isNaN(storeId)) {
+      if (!storeId) {
         res.status(400).json({
           success: false,
           message: 'Invalid store ID',

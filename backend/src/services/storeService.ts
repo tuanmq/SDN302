@@ -1,5 +1,5 @@
 import { StoreRepository } from '../repositories/storeRepository';
-import { StoreCreateDto, StoreUpdateDto, StoreResponse } from '../models/Store';
+import { IStore, StoreCreateDto, StoreUpdateDto, StoreResponse } from '../models/Store';
 
 export class StoreService {
   private storeRepository: StoreRepository;
@@ -8,16 +8,29 @@ export class StoreService {
     this.storeRepository = new StoreRepository();
   }
 
-  async getAllStores(params?: { search?: string; is_active?: boolean }): Promise<StoreResponse[]> {
-    return await this.storeRepository.findAll(params);
+  private mapStore(store: IStore): StoreResponse {
+    return {
+      store_id: store._id.toString(),
+      store_code: store.store_code,
+      store_name: store.store_name,
+      store_address: store.store_address,
+      is_active: store.is_active,
+      created_at: store.created_at,
+      updated_at: store.updated_at
+    };
   }
 
-  async getStoreById(storeId: number): Promise<StoreResponse> {
+  async getAllStores(params?: { search?: string; is_active?: boolean }): Promise<StoreResponse[]> {
+    const stores = await this.storeRepository.findAll(params);
+    return stores.map(s => this.mapStore(s));
+  }
+
+  async getStoreById(storeId: string): Promise<StoreResponse> {
     const store = await this.storeRepository.findById(storeId);
     if (!store) {
       throw new Error('Store not found');
     }
-    return store;
+    return this.mapStore(store);
   }
 
   async createStore(storeData: StoreCreateDto): Promise<StoreResponse> {
@@ -38,10 +51,11 @@ export class StoreService {
       throw new Error('Store name already exists');
     }
 
-    return await this.storeRepository.create(storeData);
+    const created = await this.storeRepository.create(storeData);
+    return this.mapStore(created);
   }
 
-  async updateStore(storeId: number, storeData: StoreUpdateDto): Promise<StoreResponse> {
+  async updateStore(storeId: string, storeData: StoreUpdateDto): Promise<StoreResponse> {
     if ('store_code' in storeData) {
       throw new Error('Cannot modify store_code after creation');
     }
@@ -62,10 +76,10 @@ export class StoreService {
     if (!updatedStore) {
       throw new Error('Failed to update store');
     }
-    return updatedStore;
+    return this.mapStore(updatedStore);
   }
 
-  async toggleStoreStatus(storeId: number, is_active: boolean): Promise<StoreResponse> {
+  async toggleStoreStatus(storeId: string, is_active: boolean): Promise<StoreResponse> {
     const store = await this.storeRepository.findById(storeId);
     if (!store) {
       throw new Error('Store not found');
@@ -75,10 +89,10 @@ export class StoreService {
     if (!updatedStore) {
       throw new Error('Failed to update store status');
     }
-    return updatedStore;
+    return this.mapStore(updatedStore);
   }
 
-  async deleteStore(storeId: number): Promise<void> {
+  async deleteStore(storeId: string): Promise<void> {
     const store = await this.storeRepository.findById(storeId);
     if (!store) {
       throw new Error('Store not found');

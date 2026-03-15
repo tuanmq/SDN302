@@ -1,295 +1,187 @@
-import pool from '../config/database';
-import { SupplyOrder, SupplyOrderCreateDto } from '../models/SupplyOrder';
-import { SupplyOrderItem, SupplyOrderItemCreateDto } from '../models/SupplyOrderItem';
-import * as supplyOrderItemBatchRepository from './supplyOrderItemBatchRepository';
+import mongoose from 'mongoose';
+import { SupplyOrderModel, ISupplyOrder } from '../models/SupplyOrder';
+import { SupplyOrderItemBatchModel } from '../models/SupplyOrderItemBatch';
+import { InventoryModel } from '../models/Inventory';
 
 export class SupplyOrderRepository {
-  async create(supplyOrderCode: string, storeId: number, createdBy: number): Promise<SupplyOrder> {
-    const query = `
-      INSERT INTO supply_order (supply_order_code, store_id, status, created_by)
-      VALUES ($1, $2, 'SUBMITTED', $3)
-      RETURNING *
-    `;
-    const result = await pool.query(query, [supplyOrderCode, storeId, createdBy]);
-    return result.rows[0];
+  async create(supplyOrderCode: string, storeId: string, createdBy: string): Promise<ISupplyOrder> {
+    const order = new SupplyOrderModel({
+      supply_order_code: supplyOrderCode,
+      store: storeId,
+      status: 'SUBMITTED',
+      created_by: createdBy,
+      items: []
+    });
+    await order.save();
+    return order.toObject();
   }
 
-  async findBySupplyOrderCode(supplyOrderCode: string): Promise<SupplyOrder | null> {
-    const query = 'SELECT * FROM supply_order WHERE supply_order_code = $1';
-    const result = await pool.query(query, [supplyOrderCode]);
-    return result.rows[0] || null;
+  async findBySupplyOrderCode(supplyOrderCode: string): Promise<ISupplyOrder | null> {
+    return SupplyOrderModel.findOne({ supply_order_code: supplyOrderCode }).lean();
   }
 
-  async createItem(itemData: SupplyOrderItemCreateDto): Promise<SupplyOrderItem> {
-    const query = `
-      INSERT INTO supply_order_item (supply_order_id, product_id, requested_quantity, status, approved_quantity)
-      VALUES ($1, $2, $3, 'PENDING', NULL)
-      RETURNING *
-    `;
-    const result = await pool.query(query, [
-      itemData.supply_order_id,
-      itemData.product_id,
-      itemData.requested_quantity
-    ]);
-    return result.rows[0];
+  async createItem(orderId: string, productId: string, requestedQuantity: number) {
+    const order = await SupplyOrderModel.findById(orderId);
+    if (!order) throw new Error('Order not found');
+    // cast values to satisfy schema types
+    order.items.push({
+      product: new mongoose.Types.ObjectId(productId) as any,
+      requested_quantity: requestedQuantity,
+      status: 'PENDING'
+    } as any);
+    await order.save();
+    return order.items[order.items.length - 1];
   }
 
-  async findByIdWithItems(orderId: number): Promise<any | null> {
-    const orderQuery = `
-      SELECT 
-        so.*,
-        s.store_name,
-        u.username as created_by_username
-      FROM supply_order so
-      LEFT JOIN store s ON so.store_id = s.store_id
-      LEFT JOIN "user" u ON so.created_by = u.user_id
-      WHERE so.supply_order_id = $1
-    `;
-    const orderResult = await pool.query(orderQuery, [orderId]);
-    
-    if (orderResult.rows.length === 0) {
-      return null;
+  async findByIdWithItems(orderId: string): Promise<any | null> {
+    const order = await SupplyOrderModel.findById(orderId)
+      .populate('store', 'store_name')
+      .populate('created_by', 'username')
+      .populate('items.product', 'product_name product_code unit')
+      .lean();
+    if (!order) return null;
+    for (const item of order.items) {
+      const itemBatches = await SupplyOrderItemBatchModel.find({ supply_order_item: item._id })
+        .populate('batch_id', 'batch_code')
+        .lean();
+      (item as any).batches = itemBatches.map((b: any) => {
+        const batchCode = b.batch_id?.batch_code ?? (typeof b.batch_id === 'object' && b.batch_id !== null ? (b.batch_id as any).batch_code : null);
+        return {
+          _id: b._id?.toString?.() ?? b._id,
+          item_batch_id: b._id?.toString?.() ?? b._id,
+          supply_order_item: b.supply_order_item?.toString?.() ?? b.supply_order_item,
+          batch_id: b.batch_id?._id?.toString?.() ?? b.batch_id?.toString?.() ?? b.batch_id,
+          batch_code: batchCode != null ? String(batchCode) : '',
+          inventory_id: b.inventory_id?.toString?.() ?? b.inventory_id,
+          quantity: Number(b.quantity) ?? 0,
+          receipted_quantity: b.receipted_quantity != null ? Number(b.receipted_quantity) : null,
+          stocked_quantity: b.stocked_quantity != null ? Number(b.stocked_quantity) : null,
+          created_at: b.created_at
+        };
+      });
+    }
+    return order;
+  }
+
+  private buildDateFilter(from?: Date, to?: Date): Record<string, unknown> {
+    const filter: Record<string, unknown> = {};
+    if (from || to) {
+      filter.created_at = {} as Record<string, Date>;
+      if (from) {
+        const start = new Date(from);
+        start.setUTCHours(0, 0, 0, 0);
+        (filter.created_at as Record<string, Date>).$gte = start;
+      }
+      if (to) {
+        const end = new Date(to);
+        end.setUTCHours(23, 59, 59, 999);
+        (filter.created_at as Record<string, Date>).$lte = end;
+      }
+    }
+    return filter;
+  }
+
+  async findByStoreId(storeId: string, from?: Date, to?: Date): Promise<any[]> {
+    const baseFilter: Record<string, unknown> = { store: storeId };
+    const dateFilter = this.buildDateFilter(from, to);
+    const filter = Object.keys(dateFilter).length ? { ...baseFilter, ...dateFilter } : baseFilter;
+
+    const orders = await SupplyOrderModel.find(filter)
+      .sort({ created_at: -1 })
+      .populate('store', 'store_name')
+      .populate('created_by', 'username')
+      .populate('items.product', 'product_name product_code unit')
+      .lean();
+
+    for (const order of orders) {
+      for (const item of order.items) {
+        item.batches = await SupplyOrderItemBatchModel.find({ supply_order_item: item._id }).lean();
+      }
+    }
+    return orders;
+  }
+
+  async findAll(from?: Date, to?: Date): Promise<any[]> {
+    const dateFilter = this.buildDateFilter(from, to);
+    const filter = Object.keys(dateFilter).length ? dateFilter : {};
+
+    const orders = await SupplyOrderModel.find(filter)
+      .sort({ created_at: -1 })
+      .populate('store', 'store_name')
+      .populate('created_by', 'username')
+      .populate('items.product', 'product_name product_code unit')
+      .lean();
+
+    for (const order of orders) {
+      for (const item of order.items) {
+        item.batches = await SupplyOrderItemBatchModel.find({ supply_order_item: item._id }).lean();
+      }
     }
 
-    const order = orderResult.rows[0];
-
-    const itemsQuery = `
-      SELECT 
-        soi.*,
-        p.product_name,
-        p.product_code,
-        p.unit,
-        (
-          SELECT COALESCE(SUM(i.quantity), 0)
-          FROM inventory i
-          INNER JOIN product_batch pb ON i.batch_id = pb.batch_id
-          INNER JOIN store s ON i.store_id = s.store_id
-          WHERE pb.product_id = soi.product_id
-            AND s.store_name = 'Central Kitchen'
-        ) as available_quantity
-      FROM supply_order_item soi
-      LEFT JOIN product p ON soi.product_id = p.product_id
-      WHERE soi.supply_order_id = $1
-      ORDER BY soi.supply_order_item_id
-    `;
-    const itemsResult = await pool.query(itemsQuery, [orderId]);
-
-    const itemsWithBatches = await Promise.all(
-      itemsResult.rows.map(async (item) => {
-        const batches = await supplyOrderItemBatchRepository.findBySupplyOrderItemId(item.supply_order_item_id);
-        return {
-          ...item,
-          batches
-        };
-      })
-    );
-
-    return {
-      ...order,
-      items: itemsWithBatches
-    };
+    return orders;
   }
 
-  async findByStoreId(storeId: number): Promise<any[]> {
-    const query = `
-      SELECT 
-        so.*,
-        s.store_name,
-        u.username as created_by_username,
-        COALESCE(
-          json_agg(
-            json_build_object(
-              'supply_order_item_id', soi.supply_order_item_id,
-              'product_id', soi.product_id,
-              'requested_quantity', soi.requested_quantity,
-              'approved_quantity', soi.approved_quantity,
-              'status', soi.status,
-              'product_code', p.product_code,
-              'product_name', p.product_name,
-              'unit', p.unit
-            )
-          ) FILTER (WHERE soi.supply_order_item_id IS NOT NULL), 
-          '[]'
-        ) as items
-      FROM supply_order so
-      LEFT JOIN store s ON so.store_id = s.store_id
-      LEFT JOIN "user" u ON so.created_by = u.user_id
-      LEFT JOIN supply_order_item soi ON so.supply_order_id = soi.supply_order_id
-      LEFT JOIN product p ON soi.product_id = p.product_id
-      WHERE so.store_id = $1
-      GROUP BY so.supply_order_id, s.store_name, u.username
-      ORDER BY so.created_at DESC
-    `;
-    const result = await pool.query(query, [storeId]);
-    
-    const ordersWithBatches = await Promise.all(
-      result.rows.map(async (order) => {
-        const batches = await supplyOrderItemBatchRepository.findBySupplyOrderId(order.supply_order_id);
-        
-        const batchesByItem: { [key: number]: any[] } = {};
-        batches.forEach(batch => {
-          if (!batchesByItem[batch.supply_order_item_id]) {
-            batchesByItem[batch.supply_order_item_id] = [];
-          }
-          batchesByItem[batch.supply_order_item_id].push(batch);
-        });
-        
-        const itemsWithBatches = order.items.map((item: any) => ({
-          ...item,
-          batches: batchesByItem[item.supply_order_item_id] || []
-        }));
-        
-        return {
-          ...order,
-          items: itemsWithBatches
-        };
-      })
-    );
-    
-    return ordersWithBatches;
+  async updateStatus(orderId: string, status: string): Promise<ISupplyOrder | null> {
+    return SupplyOrderModel.findByIdAndUpdate(orderId, { status }, { new: true }).lean();
   }
 
-  async findAll(): Promise<any[]> {
-    const query = `
-      SELECT 
-        so.*,
-        s.store_name,
-        u.username as created_by_username,
-        COALESCE(
-          json_agg(
-            json_build_object(
-              'supply_order_item_id', soi.supply_order_item_id,
-              'product_id', soi.product_id,
-              'requested_quantity', soi.requested_quantity,
-              'approved_quantity', soi.approved_quantity,
-              'status', soi.status,
-              'product_code', p.product_code,
-              'product_name', p.product_name,
-              'unit', p.unit
-            )
-          ) FILTER (WHERE soi.supply_order_item_id IS NOT NULL), 
-          '[]'
-        ) as items
-      FROM supply_order so
-      LEFT JOIN store s ON so.store_id = s.store_id
-      LEFT JOIN "user" u ON so.created_by = u.user_id
-      LEFT JOIN supply_order_item soi ON so.supply_order_id = soi.supply_order_id
-      LEFT JOIN product p ON soi.product_id = p.product_id
-      GROUP BY so.supply_order_id, s.store_name, u.username
-      ORDER BY so.created_at DESC
-    `;
-    const result = await pool.query(query);
-    
-    const ordersWithBatches = await Promise.all(
-      result.rows.map(async (order) => {
-        const batches = await supplyOrderItemBatchRepository.findBySupplyOrderId(order.supply_order_id);
-        
-        const batchesByItem: { [key: number]: any[] } = {};
-        batches.forEach(batch => {
-          if (!batchesByItem[batch.supply_order_item_id]) {
-            batchesByItem[batch.supply_order_item_id] = [];
-          }
-          batchesByItem[batch.supply_order_item_id].push(batch);
-        });
-        
-        const itemsWithBatches = order.items.map((item: any) => ({
-          ...item,
-          batches: batchesByItem[item.supply_order_item_id] || []
-        }));
-        
-        return {
-          ...order,
-          items: itemsWithBatches
-        };
-      })
-    );
-    
-    return ordersWithBatches;
+  async findById(orderId: string): Promise<ISupplyOrder | null> {
+    return SupplyOrderModel.findById(orderId).lean();
   }
 
-  async updateStatus(orderId: number, status: string): Promise<SupplyOrder | null> {
-    const query = `
-      UPDATE supply_order
-      SET status = $1
-      WHERE supply_order_id = $2
-      RETURNING *
-    `;
-    const result = await pool.query(query, [status, orderId]);
-    return result.rows[0] || null;
+  async updateItem(itemId: string, approvedQuantity: number | null, status: string) {
+    const order = await SupplyOrderModel.findOne({ 'items._id': itemId });
+    if (!order) return null;
+    const item: any = (order.items as any).id(itemId);
+    if (item) {
+      item.approved_quantity = approvedQuantity;
+      item.status = status;
+      await order.save();
+      return item;
+    }
+    return null;
   }
 
-  async findById(orderId: number): Promise<SupplyOrder | null> {
-    const query = 'SELECT * FROM supply_order WHERE supply_order_id = $1';
-    const result = await pool.query(query, [orderId]);
-    return result.rows[0] || null;
+  async getItemsByOrderId(orderId: string) {
+    const order = await SupplyOrderModel.findById(orderId).lean();
+    return order ? order.items : [];
   }
 
-  async updateItem(itemId: number, approvedQuantity: number | null, status: string): Promise<SupplyOrderItem> {
-    const query = `
-      UPDATE supply_order_item
-      SET approved_quantity = $1, status = $2
-      WHERE supply_order_item_id = $3
-      RETURNING *
-    `;
-    const result = await pool.query(query, [approvedQuantity, status, itemId]);
-    return result.rows[0];
+  async getBatchesForProduct(productId: string): Promise<{ inventory_id: string; batch_id: string; quantity: number }[]> {
+    const { StoreModel } = await import('../models/Store');
+    const { ProductBatchModel } = await import('../models/ProductBatch');
+    const centralStore = await StoreModel.findOne({ store_name: 'Central Kitchen' }).lean();
+    if (!centralStore) return [];
+
+    const batchIds = await ProductBatchModel.find({ product: productId }).distinct('_id');
+    const inventories = await InventoryModel.find({
+      batch: { $in: batchIds },
+      store: centralStore._id,
+      quantity: { $gt: 0 }
+    })
+      .populate('batch', 'expired_date')
+      .sort({ 'batch.expired_date': 1 })
+      .lean();
+
+    return inventories.map((inv: any) => ({
+      inventory_id: inv._id.toString(),
+      batch_id: (inv.batch && inv.batch._id ? inv.batch._id : inv.batch).toString(),
+      quantity: inv.quantity
+    }));
   }
 
-  async getItemsByOrderId(orderId: number): Promise<SupplyOrderItem[]> {
-    const query = 'SELECT * FROM supply_order_item WHERE supply_order_id = $1';
-    const result = await pool.query(query, [orderId]);
-    return result.rows;
+  async deductInventory(inventoryId: string, quantity: number): Promise<void> {
+    await InventoryModel.findByIdAndUpdate(inventoryId, { $inc: { quantity: -quantity } });
   }
 
-  async getBatchesForProduct(productId: number): Promise<any[]> {
-    const query = `
-      SELECT 
-        i.inventory_id,
-        i.batch_id,
-        i.quantity,
-        pb.expired_date
-      FROM inventory i
-      INNER JOIN product_batch pb ON i.batch_id = pb.batch_id
-      INNER JOIN store s ON i.store_id = s.store_id
-      WHERE pb.product_id = $1 
-        AND s.store_name = 'Central Kitchen'
-        AND i.quantity > 0
-      ORDER BY pb.expired_date ASC
-    `;
-    const result = await pool.query(query, [productId]);
-    return result.rows;
-  }
-
-  async deductInventory(inventoryId: number, quantity: number): Promise<void> {
-    const query = `
-      UPDATE inventory
-      SET quantity = quantity - $1
-      WHERE inventory_id = $2
-    `;
-    await pool.query(query, [quantity, inventoryId]);
-  }
-
-  async addInventoryToStore(batchId: number, storeId: number, quantity: number): Promise<void> {
-    const checkQuery = `
-      SELECT inventory_id, quantity 
-      FROM inventory 
-      WHERE batch_id = $1 AND store_id = $2
-    `;
-    const checkResult = await pool.query(checkQuery, [batchId, storeId]);
-
-    if (checkResult.rows.length > 0) {
-      const updateQuery = `
-        UPDATE inventory
-        SET quantity = quantity + $1
-        WHERE batch_id = $2 AND store_id = $3
-      `;
-      await pool.query(updateQuery, [quantity, batchId, storeId]);
+  async addInventoryToStore(batchId: string, storeId: string, quantity: number): Promise<void> {
+    const inv = await InventoryModel.findOne({ batch: batchId, store: storeId });
+    if (inv) {
+      inv.quantity += quantity;
+      await inv.save();
     } else {
-      const insertQuery = `
-        INSERT INTO inventory (batch_id, store_id, quantity, status)
-        VALUES ($1, $2, $3, 'ACTIVE')
-      `;
-      await pool.query(insertQuery, [batchId, storeId, quantity]);
+      const newInv = new InventoryModel({ batch: batchId, store: storeId, quantity, status: 'ACTIVE' });
+      await newInv.save();
     }
   }
 }

@@ -7,7 +7,7 @@ const router = Router();
 const storeController = new StoreController();
 
 router.use(jwtMiddleware);
-router.use(requireRole((1))); 
+router.use(requireRole('1')); 
 
 router.get('/', storeController.getAllStores);
 router.get('/:id', storeController.getStoreById);

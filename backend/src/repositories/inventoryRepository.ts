@@ -1,18 +1,19 @@
-import pool from '../config/database';
-import { Inventory, InventoryCreateDto, InventoryUpdateDto } from '../models/Inventory';
-import { ProductBatchWithDetails } from '../models/ProductBatch';
+import { InventoryModel, IInventory } from '../models/Inventory';
+import mongoose from 'mongoose';
+import { ProductBatchModel } from '../models/ProductBatch';
+import { StoreModel } from '../models/Store';
 
 export class InventoryRepository {
   calculateStatus(expiredDate: Date): 'ACTIVE' | 'NEAR_EXPIRY' | 'EXPIRED' {
     const now = new Date();
     const expired = new Date(expiredDate);
-    
+
     now.setHours(0, 0, 0, 0);
     expired.setHours(0, 0, 0, 0);
-    
+
     const diffTime = expired.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays < 0) {
       return 'EXPIRED';
     } else if (diffDays <= 3) {
@@ -22,152 +23,126 @@ export class InventoryRepository {
     }
   }
 
-  async findAll(): Promise<Inventory[]> {
-    const query = 'SELECT * FROM inventory ORDER BY created_at DESC';
-    const result = await pool.query(query);
-    return result.rows;
+  async findAll(): Promise<IInventory[]> {
+    return InventoryModel.find().sort({ created_at: -1 }).lean();
   }
 
-  async findById(inventoryId: number): Promise<Inventory | null> {
-    const query = 'SELECT * FROM inventory WHERE inventory_id = $1';
-    const result = await pool.query(query, [inventoryId]);
-    return result.rows[0] || null;
+  async findById(inventoryId: string): Promise<IInventory | null> {
+    return InventoryModel.findById(inventoryId).lean();
   }
 
-  async findByStoreAndBatch(storeId: number, batchId: number): Promise<Inventory | null> {
-    const query = 'SELECT * FROM inventory WHERE store_id = $1 AND batch_id = $2';
-    const result = await pool.query(query, [storeId, batchId]);
-    return result.rows[0] || null;
+  async findByStoreAndBatch(storeId: string, batchId: string): Promise<IInventory | null> {
+    return InventoryModel.findOne({ store: storeId, batch: batchId }).lean();
   }
 
-  async create(inventoryData: InventoryCreateDto): Promise<Inventory> {
-    const query = `
-      INSERT INTO inventory (store_id, batch_id, quantity, status)
-      VALUES ($1, $2, $3, $4)
-      RETURNING *
-    `;
-    
-    const result = await pool.query(query, [
-      inventoryData.store_id,
-      inventoryData.batch_id,
-      inventoryData.quantity,
-      'ACTIVE' 
+  async create(inventoryData: Partial<IInventory>): Promise<IInventory> {
+    const inventory = new InventoryModel({
+      ...inventoryData,
+      status: 'ACTIVE'
+    });
+    await inventory.save();
+    return inventory.toObject();
+  }
+
+  async update(inventoryId: string, inventoryData: Partial<IInventory>): Promise<IInventory | null> {
+    return InventoryModel.findByIdAndUpdate(inventoryId, inventoryData, { new: true }).lean();
+  }
+  async getAvailableQuantityByProduct(productId: string): Promise<number> {
+    const centralStore = await StoreModel.findOne({ store_name: 'Central Kitchen' }).lean();
+    if (!centralStore) return 0;
+
+    const inventories = await InventoryModel.aggregate([
+      { $match: { store: centralStore._id } },
+      {
+        $lookup: {
+          from: 'productbatches',
+          localField: 'batch',
+          foreignField: '_id',
+          as: 'batch'
+        }
+      },
+      { $unwind: '$batch' },
+      { $match: { 'batch.product': new mongoose.Types.ObjectId(productId) } },
+      { $group: { _id: null, total: { $sum: '$quantity' } } }
     ]);
-    
-    return result.rows[0];
+
+    return inventories[0]?.total || 0;
+  }
+  async delete(inventoryId: string): Promise<boolean> {
+    const res = await InventoryModel.findByIdAndDelete(inventoryId);
+    return res !== null;
   }
 
-  async update(inventoryId: number, inventoryData: InventoryUpdateDto): Promise<Inventory | null> {
-    const query = `
-      UPDATE inventory 
-      SET quantity = $1
-      WHERE inventory_id = $2
-      RETURNING *
-    `;
-    
-    const result = await pool.query(query, [inventoryData.quantity, inventoryId]);
-    return result.rows[0] || null;
-  }
-  async getAvailableQuantityByProduct(productId: number): Promise<number> {
-    const query = `
-      SELECT COALESCE(SUM(i.quantity), 0) as total_quantity
-      FROM inventory i
-      INNER JOIN product_batch pb ON i.batch_id = pb.batch_id
-      INNER JOIN store s ON i.store_id = s.store_id
-      WHERE pb.product_id = $1 
-        AND s.store_name = 'Central Kitchen'
-    `;
-    const result = await pool.query(query, [productId]);
-    return parseInt(result.rows[0].total_quantity) || 0;
-  }
-  async delete(inventoryId: number): Promise<boolean> {
-    const query = 'DELETE FROM inventory WHERE inventory_id = $1';
-    const result = await pool.query(query, [inventoryId]);
-    return result.rowCount !== null && result.rowCount > 0;
-  }
-
-  async findAllWithDetails(storeId: number): Promise<ProductBatchWithDetails[]> {
-    const query = `
-      SELECT 
-        pb.batch_id,
-        pb.batch_code,
-        pb.product_id,
-        p.product_name,
-        p.product_code,
-        p.unit,
-        pb.production_date,
-        pb.expired_date,
-        pb.created_at,
-        i.inventory_id,
-        i.quantity as inventory_quantity,
-        i.status as inventory_status,
-        i.disposed_reason as inventory_disposed_reason,
-        i.disposed_at
-      FROM inventory i
-      INNER JOIN product_batch pb ON i.batch_id = pb.batch_id
-      INNER JOIN product p ON pb.product_id = p.product_id
-      WHERE i.store_id = $1
-      ORDER BY pb.created_at DESC
-    `;
-    
-    const result = await pool.query(query, [storeId]);
-    return result.rows;
-  }
-
-  async updateStatus(inventoryId: number, status: string, disposedReason?: string): Promise<Inventory | null> {
-    let query: string;
-    let params: any[];
-    
-    if (status === 'DISPOSED' && disposedReason) {
-      query = `
-        UPDATE inventory 
-        SET status = $1, disposed_reason = $2, disposed_at = CURRENT_TIMESTAMP
-        WHERE inventory_id = $3
-        RETURNING *
-      `;
-      params = [status, disposedReason, inventoryId];
-    } else {
-      query = `
-        UPDATE inventory 
-        SET status = $1
-        WHERE inventory_id = $2
-        RETURNING *
-      `;
-      params = [status, inventoryId];
+  async findAllWithDetails(storeId: string): Promise<any[]> {
+    let storeObjectId: mongoose.Types.ObjectId;
+    try {
+      storeObjectId = new mongoose.Types.ObjectId(storeId);
+    } catch {
+      return [];
     }
-    
-    const result = await pool.query(query, params);
-    return result.rows[0] || null;
+    return InventoryModel.aggregate([
+      { $match: { store: storeObjectId } },
+      {
+        $lookup: {
+          from: 'productbatches',
+          localField: 'batch',
+          foreignField: '_id',
+          as: 'batch'
+        }
+      },
+      { $unwind: '$batch' },
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'batch.product',
+          foreignField: '_id',
+          as: 'product'
+        }
+      },
+      { $unwind: '$product' },
+      {
+        $project: {
+          batch_id: '$batch._id',
+          batch_code: '$batch.batch_code',
+          product_id: '$product._id',
+          product_name: '$product.product_name',
+          product_code: '$product.product_code',
+          unit: '$product.unit',
+          production_date: '$batch.production_date',
+          expired_date: '$batch.expired_date',
+          created_at: '$batch.created_at',
+          inventory_id: '$_id',
+          inventory_quantity: '$quantity',
+          inventory_status: '$status',
+          inventory_disposed_reason: '$disposed_reason',
+          inventory_disposed_at: '$disposed_at'
+        }
+      },
+      { $sort: { 'batch.created_at': -1 } }
+    ]);
+  }
+
+  async updateStatus(inventoryId: string, status: string, disposedReason?: string): Promise<IInventory | null> {
+    const update: any = { status };
+    if (status === 'DISPOSED' && disposedReason) {
+      update.disposed_reason = disposedReason;
+      update.disposed_at = new Date();
+    }
+    return InventoryModel.findByIdAndUpdate(inventoryId, update, { new: true }).lean();
   }
 
   async updateExpiredStatuses(): Promise<void> {
-    await pool.query(`
-      UPDATE inventory i
-      SET status = 'EXPIRED'
-      FROM product_batch pb
-      WHERE i.batch_id = pb.batch_id
-        AND i.status NOT IN ('DISPOSED') 
-        AND pb.expired_date < CURRENT_DATE
-    `);
+    // run three updates using aggregation or just loop through documents
+    const batches = await ProductBatchModel.find();
+    const now = new Date();
 
-    await pool.query(`
-      UPDATE inventory i
-      SET status = 'NEAR_EXPIRY'
-      FROM product_batch pb
-      WHERE i.batch_id = pb.batch_id
-        AND i.status NOT IN ('DISPOSED', 'EXPIRED')
-        AND pb.expired_date <= CURRENT_DATE + INTERVAL '3 days'
-        AND pb.expired_date >= CURRENT_DATE
-    `);
-    
-    await pool.query(`
-      UPDATE inventory i
-      SET status = 'ACTIVE'
-      FROM product_batch pb
-      WHERE i.batch_id = pb.batch_id
-        AND i.status NOT IN ('DISPOSED', 'EXPIRED', 'NEAR_EXPIRY')
-        AND pb.expired_date > CURRENT_DATE + INTERVAL '3 days'
-    `);
+    for (const batch of batches) {
+      const status = this.calculateStatus(batch.expired_date || now);
+      await InventoryModel.updateMany(
+        { batch: batch._id, status: { $nin: ['DISPOSED'] } },
+        { status }
+      );
+    }
   }
 }
 
