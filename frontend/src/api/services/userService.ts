@@ -10,8 +10,13 @@ import {
 
 export const authService = {
   login: async (credentials: LoginRequest): Promise<LoginResponse> => {
-    const response = await api.post<ApiResponse<LoginResponse>>('/auth/login', credentials);
-    return response.data.data;
+    const response = await api.post<ApiResponse<LoginResponse>>('/auth/login', credentials, { timeout: 20000 });
+    const body = response.data as { success?: boolean; data?: LoginResponse; token?: string; user?: LoginResponse['user'] };
+    const payload = body.data ?? (body.token && body.user ? { token: body.token, user: body.user } : null);
+    if (!payload?.token || !payload?.user) {
+      throw new Error('Invalid response from server');
+    }
+    return payload;
   },
 };
 

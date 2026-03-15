@@ -13,25 +13,45 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null)
+const USER_STORAGE_KEY = 'user'
 
-  // Check for existing token on mount
-  useEffect(() => {
+function parseStoredUser(): User | null {
+  try {
     const token = localStorage.getItem('token')
-    if (token) {
-      // You could decode the JWT token here to get user info
-      // For now, we'll just check if a token exists
+    const saved = localStorage.getItem(USER_STORAGE_KEY)
+    if (!token || !saved) return null
+    const parsed = JSON.parse(saved) as Record<string, unknown>
+    if (!parsed || typeof parsed.role_id !== 'number' || typeof parsed.username !== 'string') return null
+    return {
+      user_id: typeof parsed.user_id === 'number' ? parsed.user_id : Number(parsed.user_id) || 0,
+      user_code: typeof parsed.user_code === 'string' ? parsed.user_code : '',
+      username: parsed.username,
+      role_id: parsed.role_id,
+      store_id: parsed.store_id == null ? null : Number(parsed.store_id) || null,
+      is_active: typeof parsed.is_active === 'boolean' ? parsed.is_active : true,
+      created_at: typeof parsed.created_at === 'string' ? parsed.created_at : new Date().toISOString(),
     }
-  }, [])
+  } catch {
+    return null
+  }
+}
 
-  const login = (user: User) => {
-    setUser(user)
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<User | null>(parseStoredUser)
+
+  const login = (userData: User) => {
+    setUser(userData)
+    try {
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData))
+    } catch {
+      // ignore quota / disabled storage
+    }
   }
 
   const logout = () => {
     setUser(null)
     localStorage.removeItem('token')
+    localStorage.removeItem(USER_STORAGE_KEY)
   }
 
   const isAuthenticated = !!user

@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PlusIcon, TrashIcon, EyeIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 interface OrderItem {
-  product_id: number;
+  product_id: string;
   requested_quantity: number;
   product_name?: string;
   unit?: string;
@@ -26,13 +26,13 @@ const SupplyOrderStorePage = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<SupplyOrderDetailResponse | null>(null);
-  const [orderItems, setOrderItems] = useState<OrderItem[]>([{ product_id: 0, requested_quantity: 1 }]);
-  const [confirmingReceived, setConfirmingReceived] = useState<number | null>(null);
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([{ product_id: '', requested_quantity: 1 }]);
+  const [confirmingReceived, setConfirmingReceived] = useState<string | null>(null);
   const [supplyOrderCode, setSupplyOrderCode] = useState('');
   const [showConfirmReceivedModal, setShowConfirmReceivedModal] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
-  const [receiptedQuantities, setReceiptedQuantities] = useState<{ [key: number]: number }>({});
-  const [stockedQuantities, setStockedQuantities] = useState<{ [key: number]: number }>({});
+  const [receiptedQuantities, setReceiptedQuantities] = useState<{ [key: string]: number }>({});
+  const [stockedQuantities, setStockedQuantities] = useState<{ [key: string]: number }>({});
 
   useEffect(() => {
     loadOrders();
@@ -64,7 +64,7 @@ const SupplyOrderStorePage = () => {
   };
 
   const handleAddItem = () => {
-    setOrderItems([...orderItems, { product_id: 0, requested_quantity: 1 }]);
+    setOrderItems([...orderItems, { product_id: '', requested_quantity: 1 }]);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -73,9 +73,9 @@ const SupplyOrderStorePage = () => {
     }
   };
 
-  const handleItemChange = (index: number, field: keyof OrderItem, value: number) => {
+  const handleItemChange = (index: number, field: keyof OrderItem, value: number | string) => {
     const newItems = [...orderItems];
-    (newItems[index][field] as number) = value;
+    (newItems[index] as any)[field] = value;
     setOrderItems(newItems);
   };
 
@@ -96,7 +96,7 @@ const SupplyOrderStorePage = () => {
       return;
     }
 
-    const validItems = orderItems.filter(item => item.product_id > 0 && item.requested_quantity > 0);
+    const validItems = orderItems.filter(item => String(item.product_id).trim() !== '' && item.requested_quantity > 0);
     
     if (validItems.length === 0) {
       setError('Please add at least one valid item');
@@ -114,14 +114,14 @@ const SupplyOrderStorePage = () => {
       const requestData: SupplyOrderCreateRequest = {
         supply_order_code: upperSupplyOrderCode,
         items: validItems.map(item => ({
-          product_id: item.product_id,
+          product_id: String(item.product_id),
           requested_quantity: item.requested_quantity
         }))
       };
 
       await supplyOrderService.createSupplyOrder(requestData);
       setShowCreateModal(false);
-      setOrderItems([{ product_id: 0, requested_quantity: 1 }]);
+      setOrderItems([{ product_id: '', requested_quantity: 1 }]);
       setSupplyOrderCode('');
       loadOrders();
     } catch (err: any) {
@@ -129,7 +129,8 @@ const SupplyOrderStorePage = () => {
     }
   };
 
-  const handleViewDetails = async (orderId: number) => {
+  const handleViewDetails = async (orderId: string) => {
+    if (!orderId) return;
     try {
       const data = await supplyOrderService.getSupplyOrderById(orderId);
       setSelectedOrder(data);
@@ -139,16 +140,17 @@ const SupplyOrderStorePage = () => {
     }
   };
 
-  const handleOpenConfirmReceivedModal = async (orderId: number) => {
+  const handleOpenConfirmReceivedModal = async (orderId: string) => {
+    if (!orderId) return;
     try {
       const data = await supplyOrderService.getSupplyOrderById(orderId);
       setSelectedOrder(data);
       
-      const initialQuantities: { [key: number]: number } = {};
+      const initialQuantities: { [key: string]: number } = {};
       data.items.forEach(item => {
         if (item.batches && item.batches.length > 0) {
           item.batches.forEach(batch => {
-            initialQuantities[batch.item_batch_id] = batch.quantity;
+            initialQuantities[String(batch.item_batch_id)] = batch.quantity;
           });
         }
       });
@@ -161,17 +163,19 @@ const SupplyOrderStorePage = () => {
 
   const handleConfirmReceived = async () => {
     if (!selectedOrder) return;
+    const orderId = getOrderId(selectedOrder);
+    if (!orderId) return;
 
     try {
-      setConfirmingReceived(selectedOrder.supply_order_id);
+      setConfirmingReceived(orderId);
       setError('');
       
       const batches = Object.entries(receiptedQuantities).map(([batchId, quantity]) => ({
-        item_batch_id: parseInt(batchId),
+        item_batch_id: batchId,
         receipted_quantity: quantity
       }));
 
-      await supplyOrderService.confirmReceived(selectedOrder.supply_order_id, { batches });
+      await supplyOrderService.confirmReceived(orderId, { batches });
       setShowConfirmReceivedModal(false);
       setSelectedOrder(null);
       setReceiptedQuantities({});
@@ -184,7 +188,8 @@ const SupplyOrderStorePage = () => {
     }
   };
 
-  const handleOpenStockModal = async (orderId: number) => {
+  const handleOpenStockModal = async (orderId: string) => {
+    if (!orderId) return;
     try {
       const data = await supplyOrderService.getSupplyOrderById(orderId);
       
@@ -202,12 +207,12 @@ const SupplyOrderStorePage = () => {
       
       setSelectedOrder(data);
       
-      const initialQuantities: { [key: number]: number } = {};
+      const initialQuantities: { [key: string]: number } = {};
       data.items.forEach(item => {
         if (item.batches && item.batches.length > 0) {
           item.batches.forEach(batch => {
             if (batch.receipted_quantity && batch.receipted_quantity > 0) {
-              initialQuantities[batch.item_batch_id] = batch.receipted_quantity;
+              initialQuantities[String(batch.item_batch_id)] = batch.receipted_quantity;
             }
           });
         }
@@ -221,16 +226,18 @@ const SupplyOrderStorePage = () => {
 
   const handleStock = async () => {
     if (!selectedOrder) return;
+    const orderId = getOrderId(selectedOrder);
+    if (!orderId) return;
 
     try {
       setError('');
       
       const batches = Object.entries(stockedQuantities).map(([batchId, quantity]) => ({
-        item_batch_id: parseInt(batchId),
+        item_batch_id: batchId,
         stocked_quantity: quantity
       }));
 
-      await supplyOrderService.stockSupplyOrder(selectedOrder.supply_order_id, { batches });
+      await supplyOrderService.stockSupplyOrder(orderId, { batches });
       setShowStockModal(false);
       setSelectedOrder(null);
       setStockedQuantities({});
@@ -241,7 +248,8 @@ const SupplyOrderStorePage = () => {
     }
   };
 
-  const handleCancelOrder = async (orderId: number) => {
+  const handleCancelOrder = async (orderId: string) => {
+    if (!orderId) return;
     if (!window.confirm('Are you sure you want to cancel this order?')) {
       return;
     }
@@ -303,6 +311,10 @@ const SupplyOrderStorePage = () => {
       minute: '2-digit'
     });
   };
+
+  /** Order id from API: MongoDB returns _id, legacy may use supply_order_id */
+  const getOrderId = (order: SupplyOrder | SupplyOrderDetailResponse): string =>
+    String((order as any)._id ?? order.supply_order_id ?? '');
 
   if (loading) {
     return (
@@ -376,19 +388,23 @@ const SupplyOrderStorePage = () => {
                 </td>
               </tr>
             ) : (
-              orders.map((order) => (
-                <tr key={order.supply_order_id} className="hover:bg-gray-50">
+              orders.map((order) => {
+                const orderId = getOrderId(order);
+                const storeName = order.store_name ?? (order as any).store?.store_name ?? `Store ${order.store_id ?? (order as any).store?._id ?? ''}`;
+                const createdByUsername = order.created_by_username ?? (order as any).created_by?.username ?? `User ${order.created_by ?? (order as any).created_by?._id ?? ''}`;
+                return (
+                <tr key={orderId} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    #{order.supply_order_id}
+                    #{orderId.slice(-6)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-700">
                     {order.supply_order_code}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {order.store_name || `Store ${order.store_id}`}
+                    {storeName}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {order.created_by_username || `User ${order.created_by}`}
+                    {createdByUsername}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDate(order.created_at)}
@@ -401,7 +417,7 @@ const SupplyOrderStorePage = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => handleViewDetails(order.supply_order_id)}
+                        onClick={() => handleViewDetails(orderId)}
                         className="text-blue-600 hover:text-blue-900 flex items-center space-x-1"
                       >
                         <EyeIcon className="w-4 h-4" />
@@ -409,7 +425,7 @@ const SupplyOrderStorePage = () => {
                       </button>
                       {isStoreStaff && order.status === 'DELIVERING' && (
                         <button
-                          onClick={() => handleOpenConfirmReceivedModal(order.supply_order_id)}
+                          onClick={() => handleOpenConfirmReceivedModal(orderId)}
                           className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold"
                         >
                           Confirm Received
@@ -419,7 +435,7 @@ const SupplyOrderStorePage = () => {
                         item.batches && item.batches.some(batch => batch.receipted_quantity && batch.receipted_quantity > 0)
                       ) && (
                         <button
-                          onClick={() => handleOpenStockModal(order.supply_order_id)}
+                          onClick={() => handleOpenStockModal(orderId)}
                           className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs font-semibold"
                         >
                           Stock
@@ -427,7 +443,7 @@ const SupplyOrderStorePage = () => {
                       )}
                       {isStoreStaff && (order.status === 'APPROVED' || order.status === 'PARTLY_APPROVED') && (
                         <button
-                          onClick={() => handleCancelOrder(order.supply_order_id)}
+                          onClick={() => handleCancelOrder(orderId)}
                           className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs font-semibold"
                         >
                           Cancel
@@ -436,7 +452,8 @@ const SupplyOrderStorePage = () => {
                     </div>
                   </td>
                 </tr>
-              ))
+              );
+              })
             )}
           </tbody>
         </table>
@@ -451,7 +468,7 @@ const SupplyOrderStorePage = () => {
               <button
                 onClick={() => {
                   setShowCreateModal(false);
-                  setOrderItems([{ product_id: 0, requested_quantity: 1 }]);
+                  setOrderItems([{ product_id: '', requested_quantity: 1 }]);
                   setSupplyOrderCode('');
                   setError('');
                 }}
@@ -494,17 +511,20 @@ const SupplyOrderStorePage = () => {
                         Product
                       </label>
                       <select
-                        value={item.product_id}
-                        onChange={(e) => handleItemChange(index, 'product_id', parseInt(e.target.value))}
+                        value={item.product_id ?? ''}
+                        onChange={(e) => handleItemChange(index, 'product_id', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         required
                       >
-                        <option value={0}>Select a product</option>
-                        {products.map((product) => (
-                          <option key={product.product_id} value={product.product_id}>
-                            {product.product_code} - {product.product_name} ({product.unit})
-                          </option>
-                        ))}
+                        <option value="">Select a product</option>
+                        {products.map((product) => {
+                          const id = (product as any)._id ?? product.product_id;
+                          return (
+                            <option key={id} value={String(id)}>
+                              {product.product_code} - {product.product_name} ({product.unit})
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                     <div className="w-32">
@@ -553,7 +573,7 @@ const SupplyOrderStorePage = () => {
                   type="button"
                   onClick={() => {
                     setShowCreateModal(false);
-                    setOrderItems([{ product_id: 0, requested_quantity: 1 }]);
+                    setOrderItems([{ product_id: '', requested_quantity: 1 }]);
                     setError('');
                   }}
                   className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
@@ -586,7 +606,7 @@ const SupplyOrderStorePage = () => {
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div>
                 <p className="text-sm text-gray-600">Order ID</p>
-                <p className="text-lg font-semibold">#{selectedOrder.supply_order_id}</p>
+                <p className="text-lg font-semibold">#{getOrderId(selectedOrder).slice(-6)}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Supply Order Code</p>
@@ -601,13 +621,13 @@ const SupplyOrderStorePage = () => {
               <div>
                 <p className="text-sm text-gray-600">Store</p>
                 <p className="text-lg font-semibold">
-                  {selectedOrder.store_name || `Store ${selectedOrder.store_id}`}
+                  {selectedOrder.store_name ?? (selectedOrder as any).store?.store_name ?? `Store ${selectedOrder.store_id ?? (selectedOrder as any).store?._id ?? ''}`}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Created By</p>
                 <p className="text-lg font-semibold">
-                  {selectedOrder.created_by_username || `User ${selectedOrder.created_by}`}
+                  {selectedOrder.created_by_username ?? (selectedOrder as any).created_by?.username ?? `User ${selectedOrder.created_by ?? (selectedOrder as any).created_by?._id ?? ''}`}
                 </p>
               </div>
               <div>
@@ -652,20 +672,23 @@ const SupplyOrderStorePage = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {selectedOrder.items.map((item) => {
+                    {(selectedOrder.items || []).map((item: any) => {
+                      const itemId = item.supply_order_item_id ?? item._id;
+                      const productCode = item.product_code ?? item.product?.product_code ?? '-';
+                      const productName = item.product_name ?? item.product?.product_name ?? `Product ${item.product_id ?? item.product?._id ?? ''}`;
+                      const unit = item.unit ?? item.product?.unit ?? '-';
                       const hasBatches = item.batches && item.batches.length > 0;
-                      
+
                       if (!hasBatches) {
-                        // Show item without batch breakdown
                         return (
-                          <tr key={item.supply_order_item_id}>
+                          <tr key={itemId}>
                             <td className="px-4 py-3 text-sm font-bold text-blue-700">
-                              {item.product_code || '-'}
+                              {productCode}
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-900">
-                              {item.product_name || `Product ${item.product_id}`}
+                              {productName}
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{item.unit || '-'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{unit}</td>
                             <td className="px-4 py-3 text-sm text-gray-500 italic">-</td>
                             <td className="px-4 py-3 text-sm text-gray-900 text-right">
                               {item.requested_quantity}
@@ -681,51 +704,57 @@ const SupplyOrderStorePage = () => {
                           </tr>
                         );
                       }
-                      
-                      // Show one row per batch
-                      return item.batches!.map((batch, batchIndex) => (
-                        <tr key={`${item.supply_order_item_id}-${batch.item_batch_id}`} className={batchIndex > 0 ? 'bg-gray-50' : ''}>
-                          {batchIndex === 0 ? (
-                            <>
-                              <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm font-bold text-blue-700 border-r border-gray-200">
-                                {item.product_code || '-'}
-                              </td>
-                              <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">
-                                {item.product_name || `Product ${item.product_id}`}
-                              </td>
-                              <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">
-                                {item.unit || '-'}
-                              </td>
-                            </>
-                          ) : null}
-                          <td className="px-4 py-3 text-sm font-semibold text-purple-700">
-                            {batch.batch_code || `Batch ${batch.batch_id}`}
-                          </td>
-                          {batchIndex === 0 ? (
-                            <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-900 text-right border-l border-gray-200">
-                              {item.requested_quantity}
+
+                      return item.batches.map((batch: any, batchIndex: number) => {
+                        const batchId = batch.item_batch_id ?? batch._id ?? batchIndex;
+                        const batchCode = batch.batch_code ?? (batch.batch_id && typeof batch.batch_id === 'object' ? batch.batch_id.batch_code : null) ?? (batch.batch_id ? `Batch ${batch.batch_id}` : '-');
+                        const approvedQty = batch.quantity != null ? Number(batch.quantity) : '-';
+                        const receiptedQty = batch.receipted_quantity != null ? Number(batch.receipted_quantity) : '-';
+                        const stockedQty = batch.stocked_quantity != null ? Number(batch.stocked_quantity) : '-';
+                        return (
+                          <tr key={`${itemId}-${batchId}`} className={batchIndex > 0 ? 'bg-gray-50' : ''}>
+                            {batchIndex === 0 ? (
+                              <>
+                                <td rowSpan={item.batches.length} className="px-4 py-3 text-sm font-bold text-blue-700 border-r border-gray-200">
+                                  {productCode}
+                                </td>
+                                <td rowSpan={item.batches.length} className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">
+                                  {productName}
+                                </td>
+                                <td rowSpan={item.batches.length} className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">
+                                  {unit}
+                                </td>
+                              </>
+                            ) : null}
+                            <td className="px-4 py-3 text-sm font-semibold text-purple-700">
+                              {batchCode}
                             </td>
-                          ) : null}
-                          <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
-                            {batch.quantity}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-right">
-                            <span className={batch.receipted_quantity !== null && batch.receipted_quantity !== undefined ? 'font-semibold text-green-700' : 'text-gray-500'}>
-                              {batch.receipted_quantity ?? '-'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-right">
-                            <span className={batch.stocked_quantity !== null && batch.stocked_quantity !== undefined ? 'font-semibold text-indigo-700' : 'text-gray-500'}>
-                              {batch.stocked_quantity ?? '-'}
-                            </span>
-                          </td>
-                          {batchIndex === 0 ? (
-                            <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-500 border-l border-gray-200">
-                              {item.status || 'Pending'}
+                            {batchIndex === 0 ? (
+                              <td rowSpan={item.batches.length} className="px-4 py-3 text-sm text-gray-900 text-right border-l border-gray-200">
+                                {item.requested_quantity}
+                              </td>
+                            ) : null}
+                            <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
+                              {approvedQty}
                             </td>
-                          ) : null}
-                        </tr>
-                      ));
+                            <td className="px-4 py-3 text-sm text-right">
+                              <span className={batch.receipted_quantity != null ? 'font-semibold text-green-700' : 'text-gray-500'}>
+                                {receiptedQty}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right">
+                              <span className={batch.stocked_quantity != null ? 'font-semibold text-indigo-700' : 'text-gray-500'}>
+                                {stockedQty}
+                              </span>
+                            </td>
+                            {batchIndex === 0 ? (
+                              <td rowSpan={item.batches.length} className="px-4 py-3 text-sm text-gray-500 border-l border-gray-200">
+                                {item.status || 'Pending'}
+                              </td>
+                            ) : null}
+                          </tr>
+                        );
+                      });
                     })}
                   </tbody>
                 </table>

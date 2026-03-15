@@ -15,10 +15,10 @@ export type SupplyOrderItemStatus =
   | 'REJECTED';
 
 export interface SupplyOrderItemBatch {
-  item_batch_id: number;
-  supply_order_item_id: number;
-  batch_id: number;
-  inventory_id: number;
+  item_batch_id: string;
+  supply_order_item_id: string;
+  batch_id: string;
+  inventory_id: string;
   quantity: number; 
   receipted_quantity: number | null;
   stocked_quantity: number | null;
@@ -28,9 +28,9 @@ export interface SupplyOrderItemBatch {
 }
 
 export interface SupplyOrderItem {
-  supply_order_item_id: number;
-  supply_order_id: number;
-  product_id: number;
+  supply_order_item_id: string;
+  supply_order_id: string;
+  product_id: string;
   requested_quantity: number;
   approved_quantity: number | null;
   status: SupplyOrderItemStatus;
@@ -42,19 +42,20 @@ export interface SupplyOrderItem {
 }
 
 export interface SupplyOrder {
-  supply_order_id: number;
+  supply_order_id?: string;  // optional; MongoDB returns _id
+  _id?: string;              // MongoDB document id
   supply_order_code: string;
-  store_id: number;
+  store_id: string;
   status: SupplyOrderStatus;
   created_at: string;
-  created_by: number;
+  created_by: string;
   store_name?: string;
   created_by_username?: string;
   items?: SupplyOrderItem[];
 }
 
 export interface SupplyOrderItemCreateRequest {
-  product_id: number;
+  product_id: string;
   requested_quantity: number;
 }
 
@@ -65,10 +66,12 @@ export interface SupplyOrderCreateRequest {
 
 export interface SupplyOrderDetailResponse extends SupplyOrder {
   items: SupplyOrderItem[];
+  /** MongoDB: same as _id when supply_order_id not set */
+  supply_order_id?: string;
 }
 
 export interface ReviewItemRequest {
-  supply_order_item_id: number;
+  supply_order_item_id: string;
   action: 'APPROVE' | 'PARTLY_APPROVE' | 'REJECT';
   approved_quantity?: number;
 }
@@ -78,7 +81,7 @@ export interface ReviewSupplyOrderRequest {
 }
 
 export interface ConfirmReceivedBatchRequest {
-  item_batch_id: number;
+  item_batch_id: string;
   receipted_quantity: number;
 }
 
@@ -87,7 +90,7 @@ export interface ConfirmReceivedRequest {
 }
 
 export interface StockBatchRequest {
-  item_batch_id: number;
+  item_batch_id: string;
   stocked_quantity: number;
 }
 

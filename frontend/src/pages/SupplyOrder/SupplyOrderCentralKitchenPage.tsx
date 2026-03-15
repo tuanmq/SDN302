@@ -44,7 +44,18 @@ const SupplyOrderCentralKitchenPage = () => {
     }
   };
 
-  const handleReviewOrder = async (orderId: number) => {
+  const getOrderId = (order: SupplyOrder): string => {
+    const id = order.supply_order_id ?? order._id;
+    if (id == null || id === undefined || String(id) === 'undefined') return '';
+    return String(id);
+  };
+
+  const handleReviewOrder = async (order: SupplyOrder) => {
+    const orderId = getOrderId(order);
+    if (!orderId) {
+      setError('Invalid order');
+      return;
+    }
     try {
       const data = await supplyOrderService.getSupplyOrderByIdCentral(orderId);
       setSelectedOrder(data);
@@ -62,7 +73,12 @@ const SupplyOrderCentralKitchenPage = () => {
     }
   };
 
-  const handleViewDetails = async (orderId: number) => {
+  const handleViewDetails = async (order: SupplyOrder) => {
+    const orderId = getOrderId(order);
+    if (!orderId) {
+      setError('Invalid order');
+      return;
+    }
     try {
       const data = await supplyOrderService.getSupplyOrderByIdCentral(orderId);
       setSelectedOrder(data);
@@ -154,7 +170,12 @@ const SupplyOrderCentralKitchenPage = () => {
         });
       }
 
-      await supplyOrderService.reviewSupplyOrder(selectedOrder.supply_order_id, { items });
+      const orderId = String(selectedOrder.supply_order_id ?? selectedOrder._id ?? '');
+      if (!orderId) {
+        setError('Invalid order');
+        return;
+      }
+      await supplyOrderService.reviewSupplyOrder(orderId, { items });
       setShowReviewModal(false);
       setSelectedOrder(null);
       setReviewState({});
@@ -165,7 +186,12 @@ const SupplyOrderCentralKitchenPage = () => {
     }
   };
 
-  const handleStartDelivery = async (orderId: number) => {
+  const handleStartDelivery = async (order: SupplyOrder) => {
+    const orderId = getOrderId(order);
+    if (!orderId) {
+      setError('Invalid order');
+      return;
+    }
     if (!confirm('Are you sure you want to start delivery for this order?')) {
       return;
     }
@@ -280,19 +306,19 @@ const SupplyOrderCentralKitchenPage = () => {
                 </td>
               </tr>
             ) : (
-              orders.map((order) => (
-                <tr key={order.supply_order_id} className="hover:bg-gray-50">
+              orders.map((order, idx) => (
+                <tr key={getOrderId(order) || `order-${idx}`} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    #{order.supply_order_id}
+                    #{getOrderId(order) || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-700">
                     {order.supply_order_code}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {order.store_name || `Store ${order.store_id}`}
+                    {order.store_name || (order.store_id ? `Store ${order.store_id}` : '-')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {order.created_by_username || `User ${order.created_by}`}
+                    {order.created_by_username || (typeof order.created_by === 'string' ? order.created_by : '-')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDate(order.created_at)}
@@ -305,7 +331,7 @@ const SupplyOrderCentralKitchenPage = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex items-center space-x-3">
                       <button
-                        onClick={() => handleViewDetails(order.supply_order_id)}
+                        onClick={() => handleViewDetails(order)}
                         className="text-blue-600 hover:text-blue-900 flex items-center space-x-1"
                       >
                         <EyeIcon className="w-4 h-4" />
@@ -313,7 +339,7 @@ const SupplyOrderCentralKitchenPage = () => {
                       </button>
                       {isCentralStaff && order.status === 'SUBMITTED' && (
                         <button
-                          onClick={() => handleReviewOrder(order.supply_order_id)}
+                          onClick={() => handleReviewOrder(order)}
                           className="text-green-600 hover:text-green-900 flex items-center space-x-1"
                         >
                           <EyeIcon className="w-4 h-4" />
@@ -322,7 +348,7 @@ const SupplyOrderCentralKitchenPage = () => {
                       )}
                       {isCentralStaff && (order.status === 'APPROVED' || order.status === 'PARTLY_APPROVED') && (
                         <button
-                          onClick={() => handleStartDelivery(order.supply_order_id)}
+                          onClick={() => handleStartDelivery(order)}
                           className="text-purple-600 hover:text-purple-900 flex items-center space-x-1"
                         >
                           <TruckIcon className="w-4 h-4" />
@@ -344,9 +370,9 @@ const SupplyOrderCentralKitchenPage = () => {
           <div className="bg-white rounded-lg p-6 w-full max-w-6xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h2 className="text-2xl font-bold text-gray-800">Review Order #{selectedOrder.supply_order_id}</h2>
+                <h2 className="text-2xl font-bold text-gray-800">Review Order #{selectedOrder.supply_order_id ?? selectedOrder._id ?? '-'}</h2>
                 <p className="text-sm text-gray-600">
-                  <span className="font-semibold text-indigo-700">{selectedOrder.supply_order_code}</span> - Store: {selectedOrder.store_name || `Store ${selectedOrder.store_id}`}
+                  <span className="font-semibold text-indigo-700">{selectedOrder.supply_order_code}</span> - Store: {selectedOrder.store_name || (selectedOrder.store_id ? `Store ${selectedOrder.store_id}` : '-')}
                 </p>
               </div>
               <button
@@ -405,9 +431,9 @@ const SupplyOrderCentralKitchenPage = () => {
                     const state = reviewState[item.supply_order_item_id] || { action: '' };
                     return (
                       <tr key={item.supply_order_item_id}>
-                        <td className="px-4 py-3 text-sm font-bold text-blue-700">{item.product_code || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900">{item.product_name}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900">{item.unit}</td>
+                        <td className="px-4 py-3 text-sm font-bold text-blue-700">{item.product_code ?? '-'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{item.product_name ?? (item.product_id ? `Product ${item.product_id}` : '-')}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{item.unit ?? '-'}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.requested_quantity}</td>
                         <td className="px-4 py-3 text-sm text-right">
                           <span className={`font-semibold ${
@@ -509,7 +535,7 @@ const SupplyOrderCentralKitchenPage = () => {
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div>
                 <p className="text-sm text-gray-600">Order ID</p>
-                <p className="text-lg font-semibold">#{selectedOrder.supply_order_id}</p>
+                <p className="text-lg font-semibold">#{selectedOrder.supply_order_id ?? selectedOrder._id ?? '-'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Supply Order Code</p>
@@ -524,13 +550,13 @@ const SupplyOrderCentralKitchenPage = () => {
               <div>
                 <p className="text-sm text-gray-600">Store</p>
                 <p className="text-lg font-semibold">
-                  {selectedOrder.store_name || `Store ${selectedOrder.store_id}`}
+                  {selectedOrder.store_name || (selectedOrder.store_id ? `Store ${selectedOrder.store_id}` : '-')}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Created By</p>
                 <p className="text-lg font-semibold">
-                  {selectedOrder.created_by_username || `User ${selectedOrder.created_by}`}
+                  {selectedOrder.created_by_username || (typeof selectedOrder.created_by === 'string' ? selectedOrder.created_by : '-')}
                 </p>
               </div>
               <div>
@@ -576,12 +602,12 @@ const SupplyOrderCentralKitchenPage = () => {
                         return (
                           <tr key={item.supply_order_item_id}>
                             <td className="px-4 py-3 text-sm font-bold text-blue-700">
-                              {item.product_code || '-'}
+                              {item.product_code ?? '-'}
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-900">
-                              {item.product_name || `Product ${item.product_id}`}
+                              {item.product_name ?? (item.product_id ? `Product ${item.product_id}` : '-')}
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{item.unit || '-'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{item.unit ?? '-'}</td>
                             <td className="px-4 py-3 text-sm text-gray-500 italic">-</td>
                             <td className="px-4 py-3 text-sm text-gray-900 text-right">
                               {item.requested_quantity}
@@ -602,13 +628,13 @@ const SupplyOrderCentralKitchenPage = () => {
                           {batchIndex === 0 ? (
                             <>
                               <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm font-bold text-blue-700 border-r border-gray-200">
-                                {item.product_code || '-'}
+                                {item.product_code ?? '-'}
                               </td>
                               <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">
-                                {item.product_name || `Product ${item.product_id}`}
+                                {item.product_name ?? (item.product_id ? `Product ${item.product_id}` : '-')}
                               </td>
                               <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">
-                                {item.unit || '-'}
+                                {item.unit ?? '-'}
                               </td>
                             </>
                           ) : null}

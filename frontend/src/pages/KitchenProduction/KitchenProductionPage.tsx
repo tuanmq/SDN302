@@ -29,9 +29,9 @@ const KitchenProductionPage = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<GroupedProduct | null>(null);
 
-  // Form states
+  // Form states (product_id as string for MongoDB _id)
   const [batchPlans, setBatchPlans] = useState<ProductBatchCreateRequest[]>([
-    { batch_code: '', product_id: 0, planned_quantity: 0 }
+    { batch_code: '', product_id: '', planned_quantity: 0 }
   ]);
 
   const [produceForm, setProduceForm] = useState({
@@ -65,7 +65,7 @@ const KitchenProductionPage = () => {
   };
 
   const handleAddBatchPlan = () => {
-    setBatchPlans([...batchPlans, { batch_code: '', product_id: 0, planned_quantity: 0 }]);
+    setBatchPlans([...batchPlans, { batch_code: '', product_id: '', planned_quantity: 0 }]);
   };
 
   const handleRemoveBatchPlan = (index: number) => {
@@ -84,7 +84,7 @@ const KitchenProductionPage = () => {
     try {
       // Validate
       for (const plan of batchPlans) {
-        if (!plan.batch_code || !plan.product_id || plan.planned_quantity <= 0) {
+        if (!plan.batch_code || !String(plan.product_id).trim() || plan.planned_quantity <= 0) {
           showToast('Please fill all required fields', 'error');
           return;
         }
@@ -93,7 +93,7 @@ const KitchenProductionPage = () => {
       await kitchenProductionService.createBatchPlans(batchPlans);
       showToast('Batch plans created successfully', 'success');
       setShowCreateModal(false);
-      setBatchPlans([{ batch_code: '', product_id: 0, planned_quantity: 0 }]);
+      setBatchPlans([{ batch_code: '', product_id: '', planned_quantity: 0 }]);
       loadData();
     } catch (error: any) {
       showToast(error.response?.data?.message || 'Failed to create batch plans', 'error');
@@ -446,16 +446,19 @@ const KitchenProductionPage = () => {
                   <div>
                     <label className="block text-sm font-medium mb-1">Product *</label>
                     <select
-                      value={plan.product_id}
-                      onChange={(e) => handleBatchPlanChange(index, 'product_id', parseInt(e.target.value))}
+                      value={plan.product_id ?? ''}
+                      onChange={(e) => handleBatchPlanChange(index, 'product_id', e.target.value)}
                       className="w-full px-3 py-2 border rounded"
                     >
-                      <option value={0}>Select Product</option>
-                      {products.map((product) => (
-                        <option key={product.product_id} value={product.product_id}>
-                          {product.product_name} ({product.unit})
-                        </option>
-                      ))}
+                      <option value="">Select Product</option>
+                      {products.map((product) => {
+                        const id = (product as any)._id ?? product.product_id;
+                        return (
+                          <option key={id} value={String(id)}>
+                            {product.product_name} ({product.unit})
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                   

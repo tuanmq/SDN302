@@ -33,7 +33,7 @@ export interface ProductBatchWithDetails {
 
 export interface ProductBatchCreateRequest {
   batch_code: string;
-  product_id: number;
+  product_id: string | number;  // string for MongoDB _id
   planned_quantity: number;
 }
 

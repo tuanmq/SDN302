@@ -36,7 +36,17 @@ const LoginPage = () => {
         navigate('/');
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+      const data = err.response?.data;
+      const serverMessage = typeof data?.message === 'string' ? data.message : null;
+      const isNetworkError = err.code === 'ECONNREFUSED' || err.message?.includes('Network Error') || (err.code === 'ECONNABORTED' && !err.response);
+      const isTimeout = err.code === 'ECONNABORTED';
+      const message = serverMessage
+        ?? (isTimeout
+          ? 'Request timed out. Please ensure the backend and MongoDB are running, then try again.'
+          : isNetworkError
+            ? 'Cannot connect to server. Please ensure the backend is running at http://localhost:3000'
+            : err.message || 'Login failed. Please try again.');
+      setError(message);
     } finally {
       setLoading(false);
     }

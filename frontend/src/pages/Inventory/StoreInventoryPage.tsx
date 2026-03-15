@@ -29,20 +29,20 @@ const StoreInventoryPage = () => {
   const { showToast } = useToast();
   const { user } = useAuth();
 
-  const numericStoreId = storeId ? parseInt(storeId) : null;
+  const currentStoreId = storeId || '';
 
   useEffect(() => {
-    if (numericStoreId) {
+    if (currentStoreId) {
       loadInventory();
     }
-  }, [numericStoreId]);
+  }, [currentStoreId]);
 
   const loadInventory = async () => {
-    if (!numericStoreId) return;
+    if (!currentStoreId) return;
     
     try {
       setLoading(true);
-      const data = await inventoryService.getInventoryByStore(numericStoreId);
+      const data = await inventoryService.getInventoryByStore(currentStoreId);
       setBatches(data);
       setError('');
     } catch (err: any) {
@@ -155,8 +155,8 @@ const StoreInventoryPage = () => {
   };
 
   const getStoreName = () => {
-    if (numericStoreId === 1) return 'Central Kitchen';
-    return `Store (ID: ${numericStoreId})`;
+    if (!currentStoreId) return 'Store';
+    return `Store (ID: ${currentStoreId})`;
   };
 
   const groupBatchesByProduct = (): GroupedProduct[] => {
