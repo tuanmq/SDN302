@@ -1,7 +1,10 @@
 import productBatchRepository from '../repositories/productBatchRepository';
 import inventoryRepository from '../repositories/inventoryRepository';
+import { ProductRepository } from '../repositories/productRepository';
 import { StoreModel } from '../models/Store';
 import { ProductBatchCreateDto, ProductBatchWithDetails, IProductBatch } from '../models/ProductBatch';
+
+const productRepository = new ProductRepository();
 
 export class ProductBatchService {
   async getAllBatchesWithDetails(storeId: string = ''): Promise<ProductBatchWithDetails[]> {
@@ -39,6 +42,14 @@ export class ProductBatchService {
     const batch = await productBatchRepository.findById(batchId);
     if (!batch) {
       throw new Error('Batch not found');
+    }
+
+    const productId = (batch as any).product?.toString?.() ?? (batch as any).product;
+    if (productId) {
+      const product = await productRepository.findById(productId);
+      if (product && !product.is_active) {
+        throw new Error('Cannot produce batch: product is inactive');
+      }
     }
 
     if (batch.status !== 'PLANNED') {
@@ -88,6 +99,14 @@ export class ProductBatchService {
       throw new Error('Batch not found');
     }
 
+    const productId = (batch as any).product?.toString?.() ?? (batch as any).product;
+    if (productId) {
+      const product = await productRepository.findById(productId);
+      if (product && !product.is_active) {
+        throw new Error('Cannot stock batch: product is inactive');
+      }
+    }
+
     if (batch.status !== 'PRODUCED') {
       throw new Error('Only PRODUCED batches can be stocked');
     }
@@ -127,6 +146,14 @@ export class ProductBatchService {
     const batch = await productBatchRepository.findById(batchId);
     if (!batch) {
       throw new Error('Batch not found');
+    }
+
+    const productId = (batch as any).product?.toString?.() ?? (batch as any).product;
+    if (productId) {
+      const product = await productRepository.findById(productId);
+      if (product && !product.is_active) {
+        throw new Error('Cannot cancel batch: product is inactive');
+      }
     }
 
     if (batch.status !== 'PLANNED' && batch.status !== 'PRODUCED') {

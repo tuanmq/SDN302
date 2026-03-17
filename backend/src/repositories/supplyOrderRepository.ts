@@ -37,7 +37,7 @@ export class SupplyOrderRepository {
     const order = await SupplyOrderModel.findById(orderId)
       .populate('store', 'store_name')
       .populate('created_by', 'username')
-      .populate('items.product', 'product_name product_code unit')
+      .populate('items.product', 'product_name product_code unit is_active')
       .lean();
     if (!order) return null;
     for (const item of order.items) {
@@ -59,6 +59,7 @@ export class SupplyOrderRepository {
           created_at: b.created_at
         };
       });
+      (item as any).product_is_active = (item as any).product?.is_active ?? true;
     }
     return order;
   }
@@ -90,12 +91,13 @@ export class SupplyOrderRepository {
       .sort({ created_at: -1 })
       .populate('store', 'store_name')
       .populate('created_by', 'username')
-      .populate('items.product', 'product_name product_code unit')
+      .populate('items.product', 'product_name product_code unit is_active')
       .lean();
 
     for (const order of orders) {
       for (const item of order.items) {
         item.batches = await SupplyOrderItemBatchModel.find({ supply_order_item: item._id }).lean();
+        (item as any).product_is_active = (item as any).product?.is_active ?? true;
       }
     }
     return orders;
@@ -109,12 +111,13 @@ export class SupplyOrderRepository {
       .sort({ created_at: -1 })
       .populate('store', 'store_name')
       .populate('created_by', 'username')
-      .populate('items.product', 'product_name product_code unit')
+      .populate('items.product', 'product_name product_code unit is_active')
       .lean();
 
     for (const order of orders) {
       for (const item of order.items) {
         item.batches = await SupplyOrderItemBatchModel.find({ supply_order_item: item._id }).lean();
+        (item as any).product_is_active = (item as any).product?.is_active ?? true;
       }
     }
 
@@ -175,12 +178,18 @@ export class SupplyOrderRepository {
   }
 
   async addInventoryToStore(batchId: string, storeId: string, quantity: number): Promise<void> {
-    const inv = await InventoryModel.findOne({ batch: batchId, store: storeId });
+    const batchObjId = mongoose.Types.ObjectId.isValid(batchId) && String(batchId).length === 24
+      ? new mongoose.Types.ObjectId(batchId)
+      : batchId;
+    const storeObjId = mongoose.Types.ObjectId.isValid(storeId) && String(storeId).length === 24
+      ? new mongoose.Types.ObjectId(storeId)
+      : storeId;
+    const inv = await InventoryModel.findOne({ batch: batchObjId, store: storeObjId });
     if (inv) {
       inv.quantity += quantity;
       await inv.save();
     } else {
-      const newInv = new InventoryModel({ batch: batchId, store: storeId, quantity, status: 'ACTIVE' });
+      const newInv = new InventoryModel({ batch: batchObjId, store: storeObjId, quantity, status: 'ACTIVE' });
       await newInv.save();
     }
   }

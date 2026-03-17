@@ -9,6 +9,7 @@ import productBatchRouter from './routers/productBatchRouter';
 import inventoryRouter from './routers/inventoryRouter';
 import supplyOrderRouter from './routers/supplyOrderRouter';
 import kitchenProductionRouter from './routers/kitchenProductionRouter';
+import auditLogRouter from './routers/auditLogRouter';
 
 dotenv.config();
 
@@ -18,6 +19,7 @@ app.use(cors());
 app.use(express.json());
 
 app.use('/api/auth', authRouter);
+app.use('/api/audit-logs', auditLogRouter);
 app.use('/api/users', userRouter);
 app.use('/api/stores', storeRouter);
 app.use('/api/products', productRouter);

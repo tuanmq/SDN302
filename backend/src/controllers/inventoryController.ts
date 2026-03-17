@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import inventoryService from '../services/inventoryService';
+import { StoreModel } from '../models/Store';
+import mongoose from 'mongoose';
 
 export class InventoryController {
   getInventoryByStore = async (req: Request, res: Response): Promise<void> => {
@@ -14,9 +16,17 @@ export class InventoryController {
       }
 
       const inventory = await inventoryService.getInventoryByStore(storeId);
+
+      let store_name: string | null = null;
+      if (mongoose.Types.ObjectId.isValid(storeId)) {
+        const store = await StoreModel.findById(storeId).select('store_name').lean();
+        store_name = store?.store_name ?? null;
+      }
+
       res.json({
         success: true,
         data: inventory,
+        store_name,
       });
     } catch (error) {
       console.error('Get inventory by store error:', error);

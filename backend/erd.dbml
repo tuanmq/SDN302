@@ -1,0 +1,99 @@
+// DBML for dbdiagram.io - Central Kitchen Management System
+// Copy toàn bộ nội dung file này và dán vào https://dbdiagram.io/d
+
+// Project: Central Kitchen Management System (MongoDB / Mongoose)
+
+Table stores {
+  _id varchar [pk, note: 'MongoDB ObjectId']
+  store_code varchar [unique, not null]
+  store_name varchar [not null]
+  store_address varchar [not null]
+  is_active boolean [default: true]
+  created_at datetime [not null]
+  updated_at datetime
+}
+
+Table users {
+  _id varchar [pk]
+  user_code varchar [unique, not null]
+  username varchar [unique, not null]
+  password varchar [not null]
+  role_id int [not null, note: '1=Admin, 2=Central Staff, 3=Store Staff']
+  store_id varchar [ref: > stores._id]
+  is_active boolean [default: true]
+  created_at datetime [not null]
+  updated_at datetime
+}
+
+Table products {
+  _id varchar [pk]
+  product_code varchar [unique, not null]
+  product_name varchar [not null]
+  unit varchar [not null]
+  is_active boolean [default: true]
+  created_at datetime
+  updated_at datetime
+}
+
+Table product_batches {
+  _id varchar [pk]
+  batch_code varchar [unique, not null]
+  product_id varchar [ref: > products._id, not null]
+  production_date datetime
+  expired_date datetime
+  status varchar [note: 'PLANNED, PRODUCED, STOCKED, CANCELLED']
+  planned_quantity int [not null]
+  produced_quantity int
+  created_at datetime
+}
+
+Table inventories {
+  _id varchar [pk]
+  store_id varchar [ref: > stores._id, not null]
+  batch_id varchar [ref: > product_batches._id, not null]
+  quantity int [not null]
+  status varchar [note: 'ACTIVE, NEAR_EXPIRY, EXPIRED, DISPOSED']
+  disposed_reason varchar [note: 'EXPIRED, WRONG_DATA, DEFECTIVE']
+  disposed_at datetime
+  created_at datetime
+}
+
+Table supply_orders {
+  _id varchar [pk]
+  supply_order_code varchar [unique, not null]
+  store_id varchar [ref: > stores._id, not null]
+  status varchar [note: 'SUBMITTED, APPROVED, PARTLY_APPROVED, REJECTED, DELIVERING, RECEIPTED, STOCKED, CANCELLED']
+  created_by varchar [ref: > users._id, not null]
+  created_at datetime [not null]
+}
+
+Table supply_order_items {
+  _id varchar [pk, note: 'Embedded subdocument in SupplyOrder']
+  supply_order_id varchar [ref: > supply_orders._id, not null]
+  product_id varchar [ref: > products._id, not null]
+  requested_quantity int [not null]
+  approved_quantity int
+  status varchar [note: 'PENDING, APPROVED, PARTLY_APPROVED, REJECTED']
+}
+
+Table supply_order_item_batches {
+  _id varchar [pk]
+  supply_order_item_id varchar [ref: > supply_order_items._id, not null]
+  batch_id varchar [ref: > product_batches._id, not null]
+  inventory_id varchar [ref: > inventories._id, not null]
+  quantity int [not null]
+  receipted_quantity int
+  stocked_quantity int
+  created_at datetime
+}
+
+Table audit_logs {
+  _id varchar [pk]
+  user_id varchar [ref: > users._id]
+  username varchar [not null]
+  action varchar [note: 'LOGIN, LOGOUT, CREATE, UPDATE, DELETE, VIEW, EXPORT']
+  resource varchar [not null]
+  details text
+  ip_address varchar
+  created_at datetime [not null]
+}

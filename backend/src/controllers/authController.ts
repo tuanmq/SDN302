@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthService, LoginDto } from '../services/authService';
+import auditLogService from '../services/auditLogService';
 
 export class AuthController {
   private authService: AuthService;
@@ -21,6 +22,15 @@ export class AuthController {
       }
 
       const result = await this.authService.login(loginData);
+
+      auditLogService.createLog({
+        user_id: result.user.user_id,
+        username: result.user.username,
+        action: 'LOGIN',
+        resource: 'Auth',
+        details: 'Login success',
+        ip_address: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress || null,
+      }).catch(() => {});
 
       res.status(200).json({
         success: true,

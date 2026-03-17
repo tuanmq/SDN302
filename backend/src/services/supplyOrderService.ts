@@ -67,6 +67,26 @@ export class SupplyOrderService {
     if (!order) {
       throw new Error('Supply order not found');
     }
+
+    // Enrich each item with available_quantity from Central Kitchen inventory
+    if (order.items && Array.isArray(order.items)) {
+      const cache = new Map<string, number>();
+      for (const item of order.items) {
+        const productId = (item as any).product?._id?.toString?.() ?? (item as any).product?.toString?.();
+        if (!productId) {
+          (item as any).available_quantity = 0;
+          continue;
+        }
+
+        if (!cache.has(productId)) {
+          const qty = await inventoryRepository.getAvailableQuantityByProduct(productId);
+          cache.set(productId, qty);
+        }
+
+        (item as any).available_quantity = cache.get(productId) ?? 0;
+      }
+    }
+
     return order;
   }
 
@@ -88,6 +108,11 @@ export class SupplyOrderService {
     }
     if (order.status !== 'SUBMITTED') {
       throw new Error('Can only review orders with SUBMITTED status');
+    }
+    const orderWithItems = await supplyOrderRepository.findByIdWithItems(orderId);
+    const hasInactiveProduct = orderWithItems?.items?.some((i: any) => i.product_is_active === false);
+    if (hasInactiveProduct) {
+      throw new Error('Order contains inactive product(s). Cannot approve.');
     }
 
     const orderItems = await supplyOrderRepository.getItemsByOrderId(orderId);
@@ -195,6 +220,11 @@ export class SupplyOrderService {
     if (order.status !== 'APPROVED' && order.status !== 'PARTLY_APPROVED') {
       throw new Error('Can only start delivery for APPROVED or PARTLY_APPROVED orders');
     }
+    const orderWithItems = await supplyOrderRepository.findByIdWithItems(orderId);
+    const hasInactiveProduct = orderWithItems?.items?.some((i: any) => i.product_is_active === false);
+    if (hasInactiveProduct) {
+      throw new Error('Order contains inactive product(s). Cannot start delivery.');
+    }
 
     const itemBatches = await supplyOrderItemBatchRepository.findBySupplyOrderId(orderId);
     
@@ -218,6 +248,11 @@ export class SupplyOrderService {
     }
     if (order.status !== 'DELIVERING') {
       throw new Error('Can only confirm received for orders with DELIVERING status');
+    }
+    const orderWithItems = await supplyOrderRepository.findByIdWithItems(orderId);
+    const hasInactiveProduct = orderWithItems?.items?.some((i: any) => i.product_is_active === false);
+    if (hasInactiveProduct) {
+      throw new Error('Order contains inactive product(s). Cannot confirm received.');
     }
 
     for (const batchItem of batches) {
@@ -252,6 +287,11 @@ export class SupplyOrderService {
     if (order.status !== 'RECEIPTED') {
       throw new Error('Can only stock orders with RECEIPTED status');
     }
+    const orderWithItems = await supplyOrderRepository.findByIdWithItems(orderId);
+    const hasInactiveProduct = orderWithItems?.items?.some((i: any) => i.product_is_active === false);
+    if (hasInactiveProduct) {
+      throw new Error('Order contains inactive product(s). Cannot stock.');
+    }
 
     const allBatches = await supplyOrderItemBatchRepository.findBySupplyOrderId(orderId);
     
@@ -283,9 +323,18 @@ export class SupplyOrderService {
       );
 
       if (batchItem.stocked_quantity > 0) {
+        const rawBatchId = (itemBatch as any).batch_id;
+        const batchIdStr =
+          rawBatchId && typeof rawBatchId === 'object' && rawBatchId._id != null
+            ? rawBatchId._id.toString()
+            : String(rawBatchId ?? '');
+        const storeIdStr =
+          (order as any).store && typeof (order as any).store === 'object' && (order as any).store._id != null
+            ? (order as any).store._id.toString()
+            : String((order as any).store ?? '');
         await supplyOrderRepository.addInventoryToStore(
-          itemBatch.batch_id.toString(),
-          order.store.toString(),
+          batchIdStr,
+          storeIdStr,
           batchItem.stocked_quantity
         );
       }

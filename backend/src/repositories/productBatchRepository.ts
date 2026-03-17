@@ -51,6 +51,7 @@ export class ProductBatchRepository {
           batch_id: '$_id',
           batch_code: 1,
           product_id: '$product_info._id',
+          product_is_active: '$product_info.is_active',
           status: 1,
           planned_quantity: 1,
           produced_quantity: 1,

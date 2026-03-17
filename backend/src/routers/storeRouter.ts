@@ -7,13 +7,15 @@ const router = Router();
 const storeController = new StoreController();
 
 router.use(jwtMiddleware);
-router.use(requireRole('1')); 
 
-router.get('/', storeController.getAllStores);
-router.get('/:id', storeController.getStoreById);
-router.post('/', storeController.createStore);
-router.put('/:id', storeController.updateStore);
-router.patch('/:id/status', storeController.toggleStoreStatus);
-router.delete('/:id', storeController.deleteStore);
+// Admin-only routes
+router.get('/', requireRole('1'), storeController.getAllStores);
+router.post('/', requireRole('1'), storeController.createStore);
+router.put('/:id', requireRole('1'), storeController.updateStore);
+router.patch('/:id/status', requireRole('1'), storeController.toggleStoreStatus);
+router.delete('/:id', requireRole('1'), storeController.deleteStore);
+
+// View single store: allow Admin, Central Staff, Store Staff
+router.get('/:id', requireRole('1', '2', '3'), storeController.getStoreById);
 
 export default router;
