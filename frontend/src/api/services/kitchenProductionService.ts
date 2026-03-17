@@ -19,18 +19,18 @@ export const kitchenProductionService = {
     return response.data;
   },
 
-  produceBatch: async (batchId: number, data: ProduceBatchRequest): Promise<ApiResponse<ProductBatch>> => {
-    const response = await api.post(`/kitchen-production/${batchId}/produce`, data);
+  produceBatch: async (batchId: string | number, data: ProduceBatchRequest): Promise<ApiResponse<ProductBatch>> => {
+    const response = await api.post(`/kitchen-production/${String(batchId)}/produce`, data);
     return response.data;
   },
 
-  stockBatch: async (batchId: number, data: StockBatchRequest): Promise<ApiResponse<ProductBatch>> => {
-    const response = await api.post(`/kitchen-production/${batchId}/stock`, data);
+  stockBatch: async (batchId: string | number, data: StockBatchRequest): Promise<ApiResponse<ProductBatch>> => {
+    const response = await api.post(`/kitchen-production/${String(batchId)}/stock`, data);
     return response.data;
   },
 
-  cancelBatch: async (batchId: number): Promise<ApiResponse<ProductBatch>> => {
-    const response = await api.post(`/kitchen-production/${batchId}/cancel`);
+  cancelBatch: async (batchId: string | number): Promise<ApiResponse<ProductBatch>> => {
+    const response = await api.post(`/kitchen-production/${String(batchId)}/cancel`);
     return response.data;
   },
 };

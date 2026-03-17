@@ -87,12 +87,17 @@ const ProductManagement = () => {
 
     try {
       if (editingProduct) {
+        const id = (editingProduct as any)._id ?? editingProduct.product_id;
+        if (!id) {
+          showToast('Cannot update product: missing product ID', 'error');
+          return;
+        }
         const updateData: ProductUpdateRequest = {
           product_name: formData.product_name,
           unit: formData.unit,
         };
         delete (updateData as any).product_code;
-        await productService.updateProduct(editingProduct.product_id, updateData);
+        await productService.updateProduct(String(id), updateData);
         showToast('Product updated successfully', 'success');
       } else {
         const createData = { ...formData } as ProductCreateRequest;
@@ -123,7 +128,12 @@ const ProductManagement = () => {
     }
 
     try {
-      await productService.toggleProductActive(product.product_id);
+      const id = (product as any)._id ?? product.product_id;
+      if (!id) {
+        showToast('Cannot update product status: missing product ID', 'error');
+        return;
+      }
+      await productService.toggleProductActive(String(id));
       showToast(`Product ${action}d successfully`, 'success');
       loadProducts();
     } catch (error: any) {
@@ -176,9 +186,7 @@ const ProductManagement = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  ID
-                </th>
+
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Product Code
                 </th>
@@ -202,9 +210,7 @@ const ProductManagement = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {products.map((product) => (
                 <tr key={product.product_id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {product.product_id}
-                  </td>
+ 
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-700">
                     {product.product_code}
                   </td>

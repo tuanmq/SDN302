@@ -1,6 +1,6 @@
 export interface Product {
-  product_id?: number;  // legacy / mapped
-  _id?: string;        // MongoDB
+  product_id?: string;  // legacy / mapped (Mongo _id)
+  _id?: string;         // MongoDB raw _id
   product_code: string;
   product_name: string;
   unit: string;

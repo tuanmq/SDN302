@@ -276,9 +276,6 @@ const SupplyOrderCentralKitchenPage = () => {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Order ID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Supply Order Code
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -308,9 +305,6 @@ const SupplyOrderCentralKitchenPage = () => {
             ) : (
               orders.map((order, idx) => (
                 <tr key={getOrderId(order) || `order-${idx}`} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    #{getOrderId(order) || '-'}
-                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-700">
                     {order.supply_order_code}
                   </td>
@@ -330,31 +324,42 @@ const SupplyOrderCentralKitchenPage = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex items-center space-x-3">
-                      <button
-                        onClick={() => handleViewDetails(order)}
-                        className="text-blue-600 hover:text-blue-900 flex items-center space-x-1"
-                      >
-                        <EyeIcon className="w-4 h-4" />
-                        <span>View</span>
-                      </button>
-                      {isCentralStaff && order.status === 'SUBMITTED' && (
-                        <button
-                          onClick={() => handleReviewOrder(order)}
-                          className="text-green-600 hover:text-green-900 flex items-center space-x-1"
-                        >
-                          <EyeIcon className="w-4 h-4" />
-                          <span>Review Order</span>
-                        </button>
-                      )}
-                      {isCentralStaff && (order.status === 'APPROVED' || order.status === 'PARTLY_APPROVED') && (
-                        <button
-                          onClick={() => handleStartDelivery(order)}
-                          className="text-purple-600 hover:text-purple-900 flex items-center space-x-1"
-                        >
-                          <TruckIcon className="w-4 h-4" />
-                          <span>Start Delivery</span>
-                        </button>
-                      )}
+                      {(() => {
+                        const orderHasInactiveProduct = order.items?.some((i: any) => i.product_is_active === false);
+                        return (
+                          <>
+                            <button
+                              onClick={() => handleViewDetails(order)}
+                              className="text-blue-600 hover:text-blue-900 flex items-center space-x-1"
+                            >
+                              <EyeIcon className="w-4 h-4" />
+                              <span>View</span>
+                            </button>
+                            {isCentralStaff && order.status === 'SUBMITTED' && (
+                              <button
+                                onClick={() => !orderHasInactiveProduct && handleReviewOrder(order)}
+                                disabled={!!orderHasInactiveProduct}
+                                className={orderHasInactiveProduct ? 'text-gray-400 cursor-not-allowed flex items-center space-x-1' : 'text-green-600 hover:text-green-900 flex items-center space-x-1'}
+                                title={orderHasInactiveProduct ? 'Order contains inactive product(s). Activate products in Product Management first.' : undefined}
+                              >
+                                <EyeIcon className="w-4 h-4" />
+                                <span>Review Order</span>
+                              </button>
+                            )}
+                            {isCentralStaff && (order.status === 'APPROVED' || order.status === 'PARTLY_APPROVED') && (
+                              <button
+                                onClick={() => !orderHasInactiveProduct && handleStartDelivery(order)}
+                                disabled={!!orderHasInactiveProduct}
+                                className={orderHasInactiveProduct ? 'text-gray-400 cursor-not-allowed flex items-center space-x-1' : 'text-purple-600 hover:text-purple-900 flex items-center space-x-1'}
+                                title={orderHasInactiveProduct ? 'Order contains inactive product(s). Cannot start delivery.' : undefined}
+                              >
+                                <TruckIcon className="w-4 h-4" />
+                                <span>Start Delivery</span>
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </td>
                 </tr>
@@ -394,11 +399,18 @@ const SupplyOrderCentralKitchenPage = () => {
               </div>
             )}
 
+            {selectedOrder?.items?.some((i: any) => i.product_is_active === false) && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded text-sm">
+                This order contains inactive product(s). Approve is disabled. Activate products in Product Management first.
+              </div>
+            )}
+
             {/* Approve All / Reject All */}
             <div className="mb-4 flex space-x-3">
               <button
                 onClick={handleApproveAll}
-                className={`px-4 py-2 rounded-lg border-2 ${approveAll ? 'bg-green-50 border-green-500 text-green-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                disabled={!!selectedOrder?.items?.some((i: any) => i.product_is_active === false)}
+                className={selectedOrder?.items?.some((i: any) => i.product_is_active === false) ? 'px-4 py-2 rounded-lg border-2 border-gray-200 text-gray-400 cursor-not-allowed' : `px-4 py-2 rounded-lg border-2 ${approveAll ? 'bg-green-50 border-green-500 text-green-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
               >
                 ✓ Approve All
               </button>
@@ -495,7 +507,8 @@ const SupplyOrderCentralKitchenPage = () => {
             <div className="flex space-x-3">
               <button
                 onClick={handleSubmitReview}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                disabled={selectedOrder?.items?.some((i: any) => i.product_is_active === false)}
+                className={selectedOrder?.items?.some((i: any) => i.product_is_active === false) ? 'flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg cursor-not-allowed' : 'flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700'}
               >
                 Submit Review
               </button>

@@ -17,8 +17,8 @@ export const productService = {
     return response.data.data;
   },
 
-  getProductById: async (id: number): Promise<Product> => {
-    const response = await api.get<ApiResponse<Product>>(`/products/${id}`);
+  getProductById: async (id: string | number): Promise<Product> => {
+    const response = await api.get<ApiResponse<Product>>(`/products/${String(id)}`);
     return response.data.data;
   },
 
@@ -27,13 +27,13 @@ export const productService = {
     return response.data.data;
   },
 
-  updateProduct: async (id: number, productData: ProductUpdateRequest): Promise<Product> => {
-    const response = await api.put<ApiResponse<Product>>(`/products/${id}`, productData);
+  updateProduct: async (id: string | number, productData: ProductUpdateRequest): Promise<Product> => {
+    const response = await api.put<ApiResponse<Product>>(`/products/${String(id)}`, productData);
     return response.data.data;
   },
 
-  toggleProductActive: async (id: number): Promise<Product> => {
-    const response = await api.put<ApiResponse<Product>>(`/products/${id}/toggle-active`);
+  toggleProductActive: async (id: string | number): Promise<Product> => {
+    const response = await api.put<ApiResponse<Product>>(`/products/${String(id)}/toggle-active`);
     return response.data.data;
   },
 

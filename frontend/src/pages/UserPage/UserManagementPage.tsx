@@ -12,7 +12,7 @@ const UserManagementPage = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<number | 'all'>('all');
-  const [filterStore, setFilterStore] = useState<number | 'all'>('all');
+  const [filterStore, setFilterStore] = useState<string | 'all'>('all');
   const [sortBy, setSortBy] = useState<'user_id' | 'username' | 'role_id' | 'store_id'>('user_id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState<UserCreateRequest | UserUpdateRequest>({
@@ -23,6 +23,7 @@ const UserManagementPage = () => {
     store_id: null,
     is_active: true,
   });
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -124,7 +125,7 @@ const UserManagementPage = () => {
     }
   };
 
-  const handleDelete = async (userId: number) => {
+  const handleDelete = async (userId: string) => {
     if (!confirm('Are you sure you want to delete this user?')) return;
 
     try {
@@ -156,13 +157,13 @@ const UserManagementPage = () => {
     return roles[roleId] || 'Unknown';
   };
 
-  const getStoreName = (storeId: number | null) => {
+  const getStoreName = (storeId: string | null) => {
     if (!storeId) return '-';
     const store = stores.find(s => s.store_id === storeId);
     return store ? store.store_name : `Store #${storeId}`;
   };
 
-  const getStoreAddress = (storeId: number | null) => {
+  const getStoreAddress = (storeId: string | null) => {
     if (!storeId) return '-';
     const store = stores.find(s => s.store_id === storeId);
     return store ? store.store_address : '-';
@@ -187,7 +188,7 @@ const UserManagementPage = () => {
       
       switch (sortBy) {
         case 'user_id':
-          compareValue = a.user_id - b.user_id;
+          compareValue = a.user_id.localeCompare(b.user_id);
           break;
         case 'username':
           compareValue = a.username.localeCompare(b.username);
@@ -308,7 +309,7 @@ const UserManagementPage = () => {
             </select>
             <select
               value={filterStore}
-              onChange={(e) => setFilterStore(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+              onChange={(e) => setFilterStore(e.target.value === 'all' ? 'all' : e.target.value)}
               className="px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all"
             >
               <option value="all">All Stores</option>
@@ -344,7 +345,6 @@ const UserManagementPage = () => {
           <table className="min-w-full">
             <thead className="bg-gray-50 border-b-2 border-gray-200">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">ID</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">User Code</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Username</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Role</th>
@@ -357,9 +357,7 @@ const UserManagementPage = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {filteredAndSortedUsers.map((user) => (
               <tr key={user.user_id} className="hover:bg-indigo-50 transition-colors duration-150">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="font-semibold text-gray-800">#{user.user_id}</span>
-                </td>
+
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="font-bold text-indigo-700 text-lg">{user.user_code}</span>
                 </td>
@@ -491,14 +489,24 @@ const UserManagementPage = () => {
                     <span className="mr-2">🔒</span>
                     Password {editingUser && <span className="text-sm text-gray-500 ml-2">(leave blank to keep current)</span>}
                   </label>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
-                    placeholder="Enter password"
-                    required={!editingUser}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full px-4 py-3 pr-12 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                      placeholder="Enter password"
+                      required={!editingUser}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? '🙈' : '👁️'}
+                    </button>
+                  </div>
                 </div>
 
                 <div>
@@ -527,7 +535,7 @@ const UserManagementPage = () => {
                     value={formData.store_id || ''}
                     onChange={(e) => setFormData({ 
                       ...formData, 
-                      store_id: e.target.value ? parseInt(e.target.value) : null 
+                      store_id: e.target.value || null
                     })}
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
                   >

@@ -37,6 +37,7 @@ export interface SupplyOrderItem {
   product_code?: string;
   product_name?: string;
   unit?: string;
+  product_is_active?: boolean;
   available_quantity?: number;
   batches?: SupplyOrderItemBatch[];
 }

@@ -1,9 +1,9 @@
 export type BatchStatus = 'PLANNED' | 'PRODUCED' | 'STOCKED' | 'CANCELLED';
 
 export interface ProductBatch {
-  batch_id: number;
+  batch_id: string;
   batch_code: string;
-  product_id: number;
+  product_id: string;
   production_date?: string | null;
   expired_date?: string | null;
   status: BatchStatus;
@@ -13,18 +13,19 @@ export interface ProductBatch {
 }
 
 export interface ProductBatchWithDetails {
-  batch_id: number;
+  batch_id: string;
   batch_code: string;
-  product_id: number;
+  product_id: string;
   product_code?: string;
   product_name: string;
+  product_is_active?: boolean;
   unit: string;
   production_date?: string | null;
   expired_date?: string | null;
   status: BatchStatus;
   planned_quantity: number;
   produced_quantity?: number | null;
-  inventory_id?: number;
+  inventory_id?: string;
   inventory_quantity?: number;
   inventory_status?: string;
   inventory_disposed_reason?: string;

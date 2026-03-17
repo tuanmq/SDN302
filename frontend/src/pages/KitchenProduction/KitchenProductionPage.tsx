@@ -157,7 +157,7 @@ const KitchenProductionPage = () => {
     }
   };
 
-  const handleCancelBatch = async (batchId: number) => {
+  const handleCancelBatch = async (batchId: string) => {
     if (!confirm('Are you sure you want to cancel this batch?')) return;
 
     try {
@@ -362,14 +362,18 @@ const KitchenProductionPage = () => {
                                       {batch.status === 'PLANNED' && (
                                         <>
                                           <button
-                                            onClick={() => handleOpenProduceModal(batch)}
-                                            className="text-blue-600 hover:text-blue-800 font-medium"
+                                            onClick={() => batch.product_is_active !== false && handleOpenProduceModal(batch)}
+                                            disabled={batch.product_is_active === false}
+                                            className={batch.product_is_active === false ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-800 font-medium'}
+                                            title={batch.product_is_active === false ? 'Product is inactive. Activate product in Product Management to continue.' : 'Produce'}
                                           >
                                             Produce
                                           </button>
                                           <button
-                                            onClick={() => handleCancelBatch(batch.batch_id)}
-                                            className="text-red-600 hover:text-red-800 font-medium"
+                                            onClick={() => batch.product_is_active !== false && handleCancelBatch(batch.batch_id)}
+                                            disabled={batch.product_is_active === false}
+                                            className={batch.product_is_active === false ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-800 font-medium'}
+                                            title={batch.product_is_active === false ? 'Product is inactive.' : 'Cancel'}
                                           >
                                             Cancel
                                           </button>
@@ -378,14 +382,18 @@ const KitchenProductionPage = () => {
                                       {batch.status === 'PRODUCED' && (
                                         <>
                                           <button
-                                            onClick={() => handleOpenStockModal(batch)}
-                                            className="text-green-600 hover:text-green-800 font-medium"
+                                            onClick={() => batch.product_is_active !== false && handleOpenStockModal(batch)}
+                                            disabled={batch.product_is_active === false}
+                                            className={batch.product_is_active === false ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:text-green-800 font-medium'}
+                                            title={batch.product_is_active === false ? 'Product is inactive. Activate product in Product Management to continue.' : 'Stock'}
                                           >
                                             Stock
                                           </button>
                                           <button
-                                            onClick={() => handleCancelBatch(batch.batch_id)}
-                                            className="text-red-600 hover:text-red-800 font-medium"
+                                            onClick={() => batch.product_is_active !== false && handleCancelBatch(batch.batch_id)}
+                                            disabled={batch.product_is_active === false}
+                                            className={batch.product_is_active === false ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-800 font-medium'}
+                                            title={batch.product_is_active === false ? 'Product is inactive.' : 'Cancel'}
                                           >
                                             Cancel
                                           </button>
@@ -690,19 +698,25 @@ const KitchenProductionPage = () => {
                             <>
                               <button
                                 onClick={() => {
+                                  if (batch.product_is_active === false) return;
                                   setIsDetailModalOpen(false);
                                   handleOpenProduceModal(batch);
                                 }}
-                                className="text-blue-600 hover:text-blue-900 font-medium"
+                                disabled={batch.product_is_active === false}
+                                className={batch.product_is_active === false ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-900 font-medium'}
+                                title={batch.product_is_active === false ? 'Product is inactive.' : undefined}
                               >
                                 Produce
                               </button>
                               <button
                                 onClick={() => {
+                                  if (batch.product_is_active === false) return;
                                   setIsDetailModalOpen(false);
                                   handleCancelBatch(batch.batch_id);
                                 }}
-                                className="text-red-600 hover:text-red-900 font-medium"
+                                disabled={batch.product_is_active === false}
+                                className={batch.product_is_active === false ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-900 font-medium'}
+                                title={batch.product_is_active === false ? 'Product is inactive.' : undefined}
                               >
                                 Cancel
                               </button>
@@ -712,19 +726,25 @@ const KitchenProductionPage = () => {
                             <>
                               <button
                                 onClick={() => {
+                                  if (batch.product_is_active === false) return;
                                   setIsDetailModalOpen(false);
                                   handleOpenStockModal(batch);
                                 }}
-                                className="text-green-600 hover:text-green-900 font-medium"
+                                disabled={batch.product_is_active === false}
+                                className={batch.product_is_active === false ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:text-green-900 font-medium'}
+                                title={batch.product_is_active === false ? 'Product is inactive.' : undefined}
                               >
                                 Stock
                               </button>
                               <button
                                 onClick={() => {
+                                  if (batch.product_is_active === false) return;
                                   setIsDetailModalOpen(false);
                                   handleCancelBatch(batch.batch_id);
                                 }}
-                                className="text-red-600 hover:text-red-900 font-medium"
+                                disabled={batch.product_is_active === false}
+                                className={batch.product_is_active === false ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:text-red-900 font-medium'}
+                                title={batch.product_is_active === false ? 'Product is inactive.' : undefined}
                               >
                                 Cancel
                               </button>

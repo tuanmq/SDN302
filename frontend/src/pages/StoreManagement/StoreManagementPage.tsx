@@ -140,7 +140,7 @@ const StoreManagementPage = () => {
     
     switch (sortBy) {
       case 'store_id':
-        compareValue = a.store_id - b.store_id;
+        compareValue = a.store_id.localeCompare(b.store_id);
         break;
       case 'store_name':
         compareValue = a.store_name.localeCompare(b.store_name);
@@ -248,9 +248,6 @@ const StoreManagementPage = () => {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Store ID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Store Code
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -277,9 +274,6 @@ const StoreManagementPage = () => {
             ) : (
               filteredStores.map((store) => (
                 <tr key={store.store_id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {store.store_id}
-                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-700">
                     {store.store_code}
                   </td>

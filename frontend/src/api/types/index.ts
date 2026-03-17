@@ -5,3 +5,4 @@ export * from './product';
 export * from './productBatch';
 export * from './inventory';
 export * from './supplyOrder';
+export * from './auditLog';

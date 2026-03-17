@@ -358,9 +358,6 @@ const SupplyOrderStorePage = () => {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Order ID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Supply Order Code
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -394,9 +391,7 @@ const SupplyOrderStorePage = () => {
                 const createdByUsername = order.created_by_username ?? (order as any).created_by?.username ?? `User ${order.created_by ?? (order as any).created_by?._id ?? ''}`;
                 return (
                 <tr key={orderId} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    #{orderId.slice(-6)}
-                  </td>
+
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-700">
                     {order.supply_order_code}
                   </td>
@@ -416,31 +411,42 @@ const SupplyOrderStorePage = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handleViewDetails(orderId)}
-                        className="text-blue-600 hover:text-blue-900 flex items-center space-x-1"
-                      >
-                        <EyeIcon className="w-4 h-4" />
-                        <span>View</span>
-                      </button>
-                      {isStoreStaff && order.status === 'DELIVERING' && (
-                        <button
-                          onClick={() => handleOpenConfirmReceivedModal(orderId)}
-                          className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold"
-                        >
-                          Confirm Received
-                        </button>
-                      )}
-                      {isStoreStaff && order.status === 'RECEIPTED' && order.items && order.items.some(item => 
-                        item.batches && item.batches.some(batch => batch.receipted_quantity && batch.receipted_quantity > 0)
-                      ) && (
-                        <button
-                          onClick={() => handleOpenStockModal(orderId)}
-                          className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs font-semibold"
-                        >
-                          Stock
-                        </button>
-                      )}
+                      {(() => {
+                        const orderHasInactiveProduct = order.items?.some((i: any) => i.product_is_active === false);
+                        return (
+                          <>
+                            <button
+                              onClick={() => handleViewDetails(orderId)}
+                              className="text-blue-600 hover:text-blue-900 flex items-center space-x-1"
+                            >
+                              <EyeIcon className="w-4 h-4" />
+                              <span>View</span>
+                            </button>
+                            {isStoreStaff && order.status === 'DELIVERING' && (
+                              <button
+                                onClick={() => !orderHasInactiveProduct && handleOpenConfirmReceivedModal(orderId)}
+                                disabled={!!orderHasInactiveProduct}
+                                className={orderHasInactiveProduct ? 'px-3 py-1 bg-gray-400 text-white rounded cursor-not-allowed text-xs font-semibold' : 'px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold'}
+                                title={orderHasInactiveProduct ? 'Order contains inactive product(s). Cannot confirm received.' : undefined}
+                              >
+                                Confirm Received
+                              </button>
+                            )}
+                            {isStoreStaff && order.status === 'RECEIPTED' && order.items && order.items.some(item => 
+                              item.batches && item.batches.some(batch => batch.receipted_quantity && batch.receipted_quantity > 0)
+                            ) && (
+                              <button
+                                onClick={() => !orderHasInactiveProduct && handleOpenStockModal(orderId)}
+                                disabled={!!orderHasInactiveProduct}
+                                className={orderHasInactiveProduct ? 'px-3 py-1 bg-gray-400 text-white rounded cursor-not-allowed text-xs font-semibold' : 'px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs font-semibold'}
+                                title={orderHasInactiveProduct ? 'Order contains inactive product(s). Cannot stock.' : undefined}
+                              >
+                                Stock
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
                       {isStoreStaff && (order.status === 'APPROVED' || order.status === 'PARTLY_APPROVED') && (
                         <button
                           onClick={() => handleCancelOrder(orderId)}
@@ -800,6 +806,12 @@ const SupplyOrderStorePage = () => {
               </div>
             )}
 
+            {selectedOrder?.items?.some((i: any) => i.product_is_active === false) && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded text-sm">
+                This order contains inactive product(s). Confirm received is disabled. Activate products in Product Management first.
+              </div>
+            )}
+
             <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded">
               <p className="text-sm text-blue-800">
                 <strong>Supply Order:</strong> {selectedOrder.supply_order_code}
@@ -864,7 +876,7 @@ const SupplyOrderStorePage = () => {
             <div className="flex space-x-3 mt-6">
               <button
                 onClick={handleConfirmReceived}
-                disabled={confirmingReceived !== null}
+                disabled={confirmingReceived !== null || !!selectedOrder?.items?.some((i: any) => i.product_is_active === false)}
                 className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
                 {confirmingReceived ? 'Processing...' : 'Confirm Received'}
@@ -905,6 +917,12 @@ const SupplyOrderStorePage = () => {
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
                 {error}
+              </div>
+            )}
+
+            {selectedOrder?.items?.some((i: any) => i.product_is_active === false) && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded text-sm">
+                This order contains inactive product(s). Stock is disabled. Activate products in Product Management first.
               </div>
             )}
 
@@ -974,7 +992,8 @@ const SupplyOrderStorePage = () => {
             <div className="flex space-x-3 mt-6">
               <button
                 onClick={handleStock}
-                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                disabled={!!selectedOrder?.items?.some((i: any) => i.product_is_active === false)}
+                className={selectedOrder?.items?.some((i: any) => i.product_is_active === false) ? 'flex-1 px-4 py-2 bg-gray-400 text-white rounded-lg cursor-not-allowed' : 'flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700'}
               >
                 Stock to Inventory
               </button>

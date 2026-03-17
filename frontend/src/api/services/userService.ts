@@ -26,7 +26,7 @@ export const userService = {
     return response.data.data;
   },
 
-  getUserById: async (id: number): Promise<User> => {
+  getUserById: async (id: string): Promise<User> => {
     const response = await api.get<ApiResponse<User>>(`/users/${id}`);
     return response.data.data;
   },
@@ -36,12 +36,12 @@ export const userService = {
     return response.data.data;
   },
 
-  updateUser: async (id: number, userData: UserUpdateRequest): Promise<User> => {
+  updateUser: async (id: string, userData: UserUpdateRequest): Promise<User> => {
     const response = await api.put<ApiResponse<User>>(`/users/${id}`, userData);
     return response.data.data;
   },
 
-  deleteUser: async (id: number): Promise<void> => {
+  deleteUser: async (id: string): Promise<void> => {
     await api.delete(`/users/${id}`);
   },
 };

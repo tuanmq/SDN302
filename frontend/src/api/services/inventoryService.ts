@@ -5,10 +5,18 @@ import {
   ApiResponse 
 } from '../types';
 
+export interface InventoryByStoreResponse {
+  batches: ProductBatchWithDetails[];
+  store_name: string | null;
+}
+
 export const inventoryService = {
-  getInventoryByStore: async (storeId: string): Promise<ProductBatchWithDetails[]> => {
-    const response = await api.get<ApiResponse<ProductBatchWithDetails[]>>(`/inventory/store/${storeId}`);
-    return response.data.data;
+  getInventoryByStore: async (storeId: string): Promise<InventoryByStoreResponse> => {
+    const response = await api.get<ApiResponse<ProductBatchWithDetails[]> & { store_name?: string | null }>(`/inventory/store/${storeId}`);
+    return {
+      batches: response.data.data,
+      store_name: response.data.store_name ?? null,
+    };
   },
 
   getCentralKitchenInventory: async (): Promise<ProductBatchWithDetails[]> => {

@@ -143,17 +143,24 @@ const Sidebar = () => {
   const filterSubItems = (subItems?: SubMenuItem[]) => {
     if (!subItems) return [];
     
-    const filtered = subItems.map((subItem) => {
-      let path = subItem.path;
-      if (path.includes(':storeId') && user.store_id) {
-        path = path.replace(':storeId', user.store_id.toString());
-      }
-      
-      return {
-        ...subItem,
-        path
-      };
-    }).filter((subItem) => {
+    const filtered = subItems
+      .map((subItem) => {
+        let path = subItem.path;
+        if (path.includes(':storeId')) {
+          if (user.store_id) {
+            path = path.replace(':storeId', user.store_id.toString());
+          } else {
+            return null; // cannot resolve store for this user
+          }
+        }
+        
+        return {
+          ...subItem,
+          path
+        };
+      })
+      .filter((subItem): subItem is SubMenuItem => subItem !== null)
+      .filter((subItem) => {
       const hasRoleAccess = !subItem.roles || subItem.roles.includes(user.role_id);
       return hasRoleAccess;
     });

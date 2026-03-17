@@ -20,6 +20,7 @@ const StoreInventoryPage = () => {
   const [batches, setBatches] = useState<ProductBatchWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [storeName, setStoreName] = useState<string>('');
   const [isDisposeModalOpen, setIsDisposeModalOpen] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<ProductBatchWithDetails | null>(null);
   const [disposeReason, setDisposeReason] = useState<'WRONG_DATA' | 'DEFECTIVE' | ''>('');
@@ -39,14 +40,16 @@ const StoreInventoryPage = () => {
 
   const loadInventory = async () => {
     if (!currentStoreId) return;
-    
+
     try {
       setLoading(true);
-      const data = await inventoryService.getInventoryByStore(currentStoreId);
-      setBatches(data);
+      const { batches: list, store_name: name } = await inventoryService.getInventoryByStore(currentStoreId);
+      setBatches(list);
+      setStoreName(name ?? '');
       setError('');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load inventory');
+      setStoreName('');
     } finally {
       setLoading(false);
     }
@@ -105,7 +108,7 @@ const StoreInventoryPage = () => {
       }
       
       try {
-        await inventoryService.disposeInventory(batch.inventory_id, { disposed_reason: 'EXPIRED' });
+        await inventoryService.disposeInventory(String(batch.inventory_id), { disposed_reason: 'EXPIRED' });
         showToast('Batch disposed successfully', 'success');
         loadInventory();
       } catch (error: any) {
@@ -131,7 +134,7 @@ const StoreInventoryPage = () => {
     }
 
     try {
-      await inventoryService.disposeInventory(selectedBatch.inventory_id, { disposed_reason: disposeReason });
+      await inventoryService.disposeInventory(String(selectedBatch.inventory_id), { disposed_reason: disposeReason });
       showToast('Batch disposed successfully', 'success');
       setIsDisposeModalOpen(false);
       setSelectedBatch(null);
@@ -155,6 +158,7 @@ const StoreInventoryPage = () => {
   };
 
   const getStoreName = () => {
+    if (storeName) return storeName;
     if (!currentStoreId) return 'Store';
     return `Store (ID: ${currentStoreId})`;
   };
